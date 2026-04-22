@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Grok – Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #0a0a0a; color: #fafafa; }
+    textarea {
+      width: 100%; min-height: 48px; padding: 12px; resize: none;
+      background: #171717; border: 1px solid #333; border-radius: 12px;
+      color: #fafafa; font-size: 16px; outline: none; box-sizing: border-box;
+    }
+    #response-area { margin-top: 1rem; padding: 1rem; background: #000; border-radius: 8px; min-height: 80px; }
+  </style>
+</head>
+<body>
+  <h2>Grok Fixture</h2>
+  <textarea
+    placeholder="Ask Grok anything..."
+    rows="2"
+    aria-label="Ask Grok"
+  ></textarea>
+  <div id="response-area" data-testid="response">
+    Max Mustermann schrieb an max@test.de eine Nachricht.
+  </div>
+</body>
+</html>

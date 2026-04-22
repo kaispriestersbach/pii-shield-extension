@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Qwen Chat – Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #141414; color: #e5e7eb; }
+    textarea {
+      width: 100%; min-height: 48px; padding: 12px; resize: none;
+      background: #1f1f1f; border: 1px solid #333; border-radius: 12px;
+      color: #e5e7eb; font-size: 16px; outline: none; box-sizing: border-box;
+    }
+    #response-area { margin-top: 1rem; padding: 1rem; background: #0a0a0a; border-radius: 8px; min-height: 80px; }
+  </style>
+</head>
+<body>
+  <h2>Qwen Chat Fixture</h2>
+  <textarea
+    placeholder="How can I help you today?"
+    rows="2"
+    aria-label="Qwen chat input"
+  ></textarea>
+  <div id="response-area" data-testid="response">
+    Max Mustermann schrieb an max@test.de eine Nachricht.
+  </div>
+</body>
+</html>
