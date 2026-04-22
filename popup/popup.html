@@ -41,13 +41,27 @@
       </div>
     </div>
 
+    <!-- Reliability Warning -->
+    <div class="popup-warning">
+      <span class="popup-warning-icon">⚠️</span>
+      <div class="popup-warning-text">
+        <strong>KI-basierte Erkennung ist nicht deterministisch.</strong>
+        Nicht als alleiniger Schutz für regulierte oder hochsensible Daten verwenden. Bitte anonymisierte Eingaben stichprobenartig prüfen.
+      </div>
+    </div>
+
     <!-- Current Mappings -->
     <div class="popup-section" id="mappings-section">
       <div class="popup-section-header">
         <h2>Aktive Ersetzungen</h2>
-        <button class="popup-btn-small" id="btn-clear" title="Alle Ersetzungen löschen">
-          Löschen
-        </button>
+        <div class="popup-btn-group">
+          <button class="popup-btn-small" id="btn-clear" title="Ersetzungen nur für diesen Tab löschen">
+            Tab löschen
+          </button>
+          <button class="popup-btn-small popup-btn-danger" id="btn-clear-all" title="Ersetzungen für alle Tabs löschen">
+            Alle löschen
+          </button>
+        </div>
       </div>
       <div class="popup-mappings" id="mappings-container">
         <div class="popup-empty" id="mappings-empty">

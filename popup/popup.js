@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const mappingsTable = document.getElementById('mappings-table');
   const mappingsTbody = document.getElementById('mappings-tbody');
   const btnClear = document.getElementById('btn-clear');
+  const btnClearAll = document.getElementById('btn-clear-all');
 
   // ─── Get current tab info ───────────────────────────────────────────────
 
@@ -182,6 +183,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
     );
+  });
+
+  btnClearAll.addEventListener('click', () => {
+    const confirmed = window.confirm(
+      'Alle Mappings für alle Tabs unwiderruflich löschen?\n\n' +
+      'Nach dem Löschen können kopierte Antworten nicht mehr automatisch zu den Originaldaten zurückgeführt werden.'
+    );
+    if (!confirmed) return;
+
+    chrome.runtime.sendMessage({ type: 'CLEAR_ALL_MAPPINGS' }, (response) => {
+      if (response && response.success) {
+        showEmptyMappings();
+      }
+    });
   });
 
   // ─── Auto-refresh mappings ──────────────────────────────────────────────

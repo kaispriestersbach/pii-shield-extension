@@ -1,9 +1,11 @@
 /**
  * PII Shield – Background Service Worker
- * 
+ *
  * Handles PII detection via Chrome Built-in AI (Gemini Nano)
  * and manages the anonymization/de-anonymization mapping.
  */
+
+import { applyReplacements, buildReplacementEntries } from './replacement-engine.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -75,63 +77,6 @@ Example response format:
     aiSession = null;
     return null;
   }
-}
-
-// ─── Replacement Engine ─────────────────────────────────────────────────────
-
-/**
- * Build a flat list of replacement entries from a Map<from, to>.
- * For multi-word name-like values, also emits per-component entries so that
- * partial references ("Weber" instead of "Thomas Weber") are still replaced.
- */
-function buildReplacementEntries(map) {
-  const entries = [];
-  const NAME_PART = /^[\p{L}\-]+$/u;
-
-  for (const [from, to] of map) {
-    if (!from || !to) continue;
-    entries.push({ from, to });
-
-    const fromParts = from.split(/\s+/);
-    const toParts = to.split(/\s+/);
-    if (fromParts.length === toParts.length && fromParts.length >= 2) {
-      for (let i = 0; i < fromParts.length; i++) {
-        if (fromParts[i].length >= 3 && toParts[i].length >= 2 &&
-            NAME_PART.test(fromParts[i]) && NAME_PART.test(toParts[i])) {
-          entries.push({ from: fromParts[i], to: toParts[i] });
-        }
-      }
-    }
-  }
-
-  // Longest first so "Thomas Weber" wins over "Weber" alone.
-  entries.sort((a, b) => b.from.length - a.from.length);
-  return entries;
-}
-
-/**
- * Apply replacements to a text. Word-like values (letters/hyphens) use a
- * Unicode-aware word boundary and preserve up to 2 trailing letters so that
- * German inflections ("Webers", "Müllern") are carried over to the replacement.
- * Everything else (emails, phone numbers, IBANs) uses exact substring match.
- */
-function applyReplacements(text, entries) {
-  const WORD_LIKE = /^[\p{L}\p{N}\s\-]+$/u;
-  let result = text;
-
-  for (const { from, to } of entries) {
-    if (WORD_LIKE.test(from)) {
-      const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(
-        `(?<=^|[^\\p{L}\\p{N}_])${escaped}(\\p{L}{0,2})(?=$|[^\\p{L}\\p{N}_])`,
-        'gu'
-      );
-      result = result.replace(re, (_, suffix) => to + suffix);
-    } else {
-      result = result.split(from).join(to);
-    }
-  }
-  return result;
 }
 
 // ─── PII Detection & Anonymization ─────────────────────────────────────────
@@ -316,6 +261,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'CLEAR_MAPPINGS': {
       mappings.delete(tabId);
+      saveMappings();
+      sendResponse({ success: true });
+      return false;
+    }
+
+    case 'CLEAR_ALL_MAPPINGS': {
+      mappings.clear();
       saveMappings();
       sendResponse({ success: true });
       return false;

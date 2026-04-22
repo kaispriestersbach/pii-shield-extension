@@ -75,6 +75,10 @@
   function showNotification(message, type = 'info', replacements = null) {
     const banner = createNotificationBanner();
 
+    const confidenceHint = type === 'anonymized'
+      ? '<span class="pii-shield-banner-hint">KI-basiert — bitte stichprobenartig prüfen.</span>'
+      : '';
+
     let html = `
       <div class="pii-shield-banner-content">
         <div class="pii-shield-banner-icon">
@@ -82,7 +86,8 @@
         </div>
         <div class="pii-shield-banner-text">
           <strong>PII Shield</strong>
-          <span>${message}</span>
+          <span>${escapeHtml(message)}</span>
+          ${confidenceHint}
         </div>`;
 
     if (replacements && Object.keys(replacements).length > 0) {
@@ -300,36 +305,84 @@
       try { activeElement.focus(); } catch (_) {}
     }
 
-    // Handle contenteditable elements (used by ChatGPT, Claude, etc.)
     if (activeElement.isContentEditable || activeElement.getAttribute('contenteditable') === 'true') {
-      // Use execCommand for contenteditable (best compatibility with React/Vue apps)
-      document.execCommand('insertText', false, text);
-      // Dispatch input event for frameworks
-      activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+      insertIntoContentEditable(activeElement, text);
       return;
     }
 
-    // Handle textarea and input elements
     if (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT') {
-      const start = activeElement.selectionStart;
-      const end = activeElement.selectionEnd;
-      const before = activeElement.value.substring(0, start);
-      const after = activeElement.value.substring(end);
-      activeElement.value = before + text + after;
-      activeElement.selectionStart = activeElement.selectionEnd = start + text.length;
-      // Dispatch events for React/Vue
-      activeElement.dispatchEvent(new Event('input', { bubbles: true }));
-      activeElement.dispatchEvent(new Event('change', { bubbles: true }));
+      insertIntoInput(activeElement, text);
       return;
     }
 
-    // Fallback: try to find the nearest editable element
     const editableEl = findEditableElement();
     if (editableEl) {
-      editableEl.focus();
-      document.execCommand('insertText', false, text);
-      editableEl.dispatchEvent(new Event('input', { bubbles: true }));
+      try { editableEl.focus(); } catch (_) {}
+      if (editableEl.tagName === 'TEXTAREA' || editableEl.tagName === 'INPUT') {
+        insertIntoInput(editableEl, text);
+      } else {
+        insertIntoContentEditable(editableEl, text);
+      }
     }
+  }
+
+  // Insert into a plain <input> or <textarea>. Uses the native value setter so
+  // frameworks like React (which cache the descriptor) still see the change,
+  // then fires an InputEvent with inputType so beforeinput-aware editors react.
+  function insertIntoInput(el, text) {
+    const proto = el.tagName === 'TEXTAREA'
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const next = el.value.slice(0, start) + text + el.value.slice(end);
+
+    if (nativeSetter) {
+      nativeSetter.call(el, next);
+    } else {
+      el.value = next;
+    }
+    const caret = start + text.length;
+    try { el.setSelectionRange(caret, caret); } catch (_) {}
+
+    try {
+      el.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertFromPaste',
+        data: text,
+      }));
+    } catch (_) {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // Insert into a contenteditable host. We first give the framework a chance to
+  // handle a synthetic beforeinput (ProseMirror/Lexical hook into it); if the
+  // event is not canceled we fall back to execCommand, which Chromium still
+  // supports and which correctly integrates with undo history.
+  function insertIntoContentEditable(el, text) {
+    let handled = false;
+    try {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', text);
+      const beforeInput = new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertFromPaste',
+        data: text,
+        dataTransfer: dt,
+      });
+      handled = !el.dispatchEvent(beforeInput);
+    } catch (_) { /* older browsers */ }
+
+    if (!handled) {
+      // eslint-disable-next-line deprecation/deprecation
+      document.execCommand('insertText', false, text);
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function findEditableElement() {
