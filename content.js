@@ -12,8 +12,39 @@
   // ─── State ──────────────────────────────────────────────────────────────────
 
   let isEnabled = true;
-  let isProcessing = false;
   let notificationTimeout = null;
+
+  // Serialized paste processor. Events are queued so a second Ctrl+V arriving
+  // during an ongoing analysis is handled in order instead of being dropped.
+  const pasteQueue = [];
+  let pasteWorkerRunning = false;
+  // Guards the copy interceptor from re-entering itself when we rewrite clipboard.
+  let copyProcessing = false;
+
+  // Quick regex prefilter — when any of these match, we always scan the paste
+  // even if it's shorter than the default length threshold.
+  const PII_QUICK_PATTERNS = [
+    /[\w.+-]+@[\w-]+\.[\w.-]+/,              // email
+    /(?:\+?\d[\s\-\/.()]*){7,}/,              // phone-ish (7+ digits with separators)
+    /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/,       // IBAN
+    /\b(?:\d[ -]?){13,19}\b/,                 // credit card
+  ];
+
+  function shouldScanPaste(text) {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return false;
+    if (trimmed.length >= 10) return true;
+    return PII_QUICK_PATTERNS.some(re => re.test(trimmed));
+  }
+
+  function errorMessageFor(code) {
+    switch (code) {
+      case 'ai_unavailable': return 'Gemini Nano ist nicht verfügbar.';
+      case 'parse_failed':   return 'Die KI-Antwort konnte nicht ausgewertet werden.';
+      case 'detection_failed': return 'Die PII-Analyse ist fehlgeschlagen.';
+      default: return 'Unbekannter Fehler bei der PII-Analyse.';
+    }
+  }
 
   // Load initial state
   chrome.runtime.sendMessage({ type: 'GET_STATUS' }, (response) => {
@@ -44,6 +75,10 @@
   function showNotification(message, type = 'info', replacements = null) {
     const banner = createNotificationBanner();
 
+    const confidenceHint = type === 'anonymized'
+      ? '<span class="pii-shield-banner-hint">KI-basiert — bitte stichprobenartig prüfen.</span>'
+      : '';
+
     let html = `
       <div class="pii-shield-banner-content">
         <div class="pii-shield-banner-icon">
@@ -51,7 +86,8 @@
         </div>
         <div class="pii-shield-banner-text">
           <strong>PII Shield</strong>
-          <span>${message}</span>
+          <span>${escapeHtml(message)}</span>
+          ${confidenceHint}
         </div>`;
 
     if (replacements && Object.keys(replacements).length > 0) {
@@ -148,53 +184,80 @@
 
   // ─── Paste Interception (Anonymization) ───────────────────────────────────
 
-  document.addEventListener('paste', async (event) => {
-    if (!isEnabled || isProcessing) return;
+  document.addEventListener('paste', (event) => {
+    if (!isEnabled) return;
 
     const clipboardData = event.clipboardData;
     if (!clipboardData) return;
 
     const text = clipboardData.getData('text/plain');
-    if (!text || text.trim().length < 10) return; // Skip very short texts
+    if (!text || !shouldScanPaste(text)) return;
 
-    // Prevent default paste while we process
+    // Capture the paste target now — by the time the queue processes it the
+    // user may have focused elsewhere.
+    const target = document.activeElement;
+
     event.preventDefault();
     event.stopImmediatePropagation();
-    isProcessing = true;
 
+    pasteQueue.push({ text, target });
+    runPasteWorker();
+  }, true); // Capture phase — intercept before the page's own handlers
+
+  async function runPasteWorker() {
+    if (pasteWorkerRunning) return;
+    pasteWorkerRunning = true;
     try {
-      // Send text to background for PII analysis
-      const result = await sendMessage({
-        type: 'ANONYMIZE_TEXT',
-        text: text
-      });
+      while (pasteQueue.length > 0) {
+        const { text, target } = pasteQueue.shift();
+        await processOnePaste(text, target);
+      }
+    } finally {
+      pasteWorkerRunning = false;
+    }
+  }
 
-      if (result && result.hasPII) {
-        // Insert anonymized text
-        insertTextAtCursor(result.anonymizedText);
+  async function processOnePaste(text, target) {
+    try {
+      const result = await sendMessage({ type: 'ANONYMIZE_TEXT', text });
 
+      if (result && result.error) {
+        // Analysis failed — ask user before leaking potentially sensitive text.
+        // Default (Abbrechen) = do NOT insert the original text.
+        const proceed = window.confirm(
+          `PII Shield: ${errorMessageFor(result.error)}\n\n` +
+          `Originaltext trotzdem einfügen?\n\n` +
+          `Abbrechen wird empfohlen, falls der Text personenbezogene Daten enthält.`
+        );
+        if (proceed) {
+          insertTextAtTarget(target, text);
+        } else {
+          showNotification('Einfügen abgebrochen — PII-Analyse fehlgeschlagen.', 'info');
+        }
+      } else if (result && result.hasPII) {
+        insertTextAtTarget(target, result.anonymizedText);
         showNotification(
           `${Object.keys(result.replacements).length} PII-Element(e) erkannt und anonymisiert.`,
           'anonymized',
           result.replacements
         );
       } else {
-        // No PII found – insert original text
-        insertTextAtCursor(text);
+        insertTextAtTarget(target, text);
       }
     } catch (err) {
       console.error('[PII Shield] Error processing paste:', err);
-      // On error, insert original text
-      insertTextAtCursor(text);
-    } finally {
-      isProcessing = false;
+      const proceed = window.confirm(
+        `PII Shield: Kommunikation mit dem Service Worker fehlgeschlagen.\n\n` +
+        `Originaltext trotzdem einfügen?`
+      );
+      if (proceed) insertTextAtTarget(target, text);
     }
-  }, true); // Use capture phase to intercept before the page's own handlers
+  }
 
   // ─── Copy Interception (De-Anonymization) ─────────────────────────────────
 
   document.addEventListener('copy', async (event) => {
-    if (!isEnabled || isProcessing) return;
+    if (!isEnabled || copyProcessing) return;
 
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
@@ -202,7 +265,7 @@
     const selectedText = selection.toString();
     if (!selectedText || selectedText.trim().length < 5) return;
 
-    isProcessing = true;
+    copyProcessing = true;
 
     try {
       const result = await sendMessage({
@@ -211,7 +274,6 @@
       });
 
       if (result && result.deanonymizedText !== selectedText) {
-        // The text was de-anonymized – override clipboard
         event.preventDefault();
         event.clipboardData.setData('text/plain', result.deanonymizedText);
 
@@ -220,52 +282,107 @@
           'deanonymized'
         );
       }
-      // If no changes, let the default copy proceed
     } catch (err) {
       console.error('[PII Shield] Error processing copy:', err);
-      // On error, let default copy proceed
     } finally {
-      isProcessing = false;
+      copyProcessing = false;
     }
   }, true);
 
   // ─── Helper: Insert Text at Cursor ────────────────────────────────────────
 
-  function insertTextAtCursor(text) {
-    const activeElement = document.activeElement;
+  function insertTextAtTarget(preferredTarget, text) {
+    // Prefer the element that was focused when the paste event fired, but fall
+    // back to the currently focused element if the target is gone (e.g., user
+    // navigated away during the 1–5s analysis).
+    let activeElement = preferredTarget && document.contains(preferredTarget)
+      ? preferredTarget
+      : document.activeElement;
 
+    if (!activeElement) activeElement = findEditableElement();
     if (!activeElement) return;
+    if (activeElement !== document.activeElement) {
+      try { activeElement.focus(); } catch (_) {}
+    }
 
-    // Handle contenteditable elements (used by ChatGPT, Claude, etc.)
     if (activeElement.isContentEditable || activeElement.getAttribute('contenteditable') === 'true') {
-      // Use execCommand for contenteditable (best compatibility with React/Vue apps)
-      document.execCommand('insertText', false, text);
-      // Dispatch input event for frameworks
-      activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+      insertIntoContentEditable(activeElement, text);
       return;
     }
 
-    // Handle textarea and input elements
     if (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT') {
-      const start = activeElement.selectionStart;
-      const end = activeElement.selectionEnd;
-      const before = activeElement.value.substring(0, start);
-      const after = activeElement.value.substring(end);
-      activeElement.value = before + text + after;
-      activeElement.selectionStart = activeElement.selectionEnd = start + text.length;
-      // Dispatch events for React/Vue
-      activeElement.dispatchEvent(new Event('input', { bubbles: true }));
-      activeElement.dispatchEvent(new Event('change', { bubbles: true }));
+      insertIntoInput(activeElement, text);
       return;
     }
 
-    // Fallback: try to find the nearest editable element
     const editableEl = findEditableElement();
     if (editableEl) {
-      editableEl.focus();
-      document.execCommand('insertText', false, text);
-      editableEl.dispatchEvent(new Event('input', { bubbles: true }));
+      try { editableEl.focus(); } catch (_) {}
+      if (editableEl.tagName === 'TEXTAREA' || editableEl.tagName === 'INPUT') {
+        insertIntoInput(editableEl, text);
+      } else {
+        insertIntoContentEditable(editableEl, text);
+      }
     }
+  }
+
+  // Insert into a plain <input> or <textarea>. Uses the native value setter so
+  // frameworks like React (which cache the descriptor) still see the change,
+  // then fires an InputEvent with inputType so beforeinput-aware editors react.
+  function insertIntoInput(el, text) {
+    const proto = el.tagName === 'TEXTAREA'
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const next = el.value.slice(0, start) + text + el.value.slice(end);
+
+    if (nativeSetter) {
+      nativeSetter.call(el, next);
+    } else {
+      el.value = next;
+    }
+    const caret = start + text.length;
+    try { el.setSelectionRange(caret, caret); } catch (_) {}
+
+    try {
+      el.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertFromPaste',
+        data: text,
+      }));
+    } catch (_) {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // Insert into a contenteditable host. We first give the framework a chance to
+  // handle a synthetic beforeinput (ProseMirror/Lexical hook into it); if the
+  // event is not canceled we fall back to execCommand, which Chromium still
+  // supports and which correctly integrates with undo history.
+  function insertIntoContentEditable(el, text) {
+    let handled = false;
+    try {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', text);
+      const beforeInput = new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertFromPaste',
+        data: text,
+        dataTransfer: dt,
+      });
+      handled = !el.dispatchEvent(beforeInput);
+    } catch (_) { /* older browsers */ }
+
+    if (!handled) {
+      // eslint-disable-next-line deprecation/deprecation
+      document.execCommand('insertText', false, text);
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function findEditableElement() {

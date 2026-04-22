@@ -1,9 +1,11 @@
 /**
  * PII Shield – Background Service Worker
- * 
+ *
  * Handles PII detection via Chrome Built-in AI (Gemini Nano)
  * and manages the anonymization/de-anonymization mapping.
  */
+
+import { applyReplacements, buildReplacementEntries } from './replacement-engine.js';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -89,8 +91,7 @@ async function detectAndAnonymize(text, tabId) {
   const session = await getAISession();
 
   if (!session) {
-    // Fallback: return text unchanged if AI is not available
-    return { anonymizedText: text, replacements: {}, hasPII: false };
+    return { anonymizedText: text, replacements: {}, hasPII: false, error: 'ai_unavailable' };
   }
 
   try {
@@ -122,10 +123,10 @@ ${text}
           replacements = JSON.parse(jsonMatch[0]);
         } catch (e) {
           console.error('[PII Shield] Could not extract JSON from response.');
-          return { anonymizedText: text, replacements: {}, hasPII: false };
+          return { anonymizedText: text, replacements: {}, hasPII: false, error: 'parse_failed' };
         }
       } else {
-        return { anonymizedText: text, replacements: {}, hasPII: false };
+        return { anonymizedText: text, replacements: {}, hasPII: false, error: 'parse_failed' };
       }
     }
 
@@ -141,19 +142,17 @@ ${text}
     }
     const tabMapping = mappings.get(tabId);
 
-    // Apply replacements to text (sort by length descending to avoid partial matches)
-    let anonymizedText = text;
-    const sortedEntries = Object.entries(replacements).sort(
-      ([a], [b]) => b.length - a.length
-    );
-
-    for (const [original, fake] of sortedEntries) {
+    // Store reverse mapping (fake → real) for later de-anonymization.
+    const origToFake = new Map();
+    for (const [original, fake] of Object.entries(replacements)) {
       if (!original || !fake) continue;
-      // Store reverse mapping: fake → original
+      origToFake.set(original, fake);
       tabMapping.set(fake, original);
-      // Replace all occurrences
-      anonymizedText = anonymizedText.split(original).join(fake);
     }
+
+    // Apply replacements with Unicode-aware word boundaries + inflection support.
+    const entries = buildReplacementEntries(origToFake);
+    const anonymizedText = applyReplacements(text, entries);
 
     // Persist mapping to storage
     await saveMappings();
@@ -163,9 +162,8 @@ ${text}
 
   } catch (err) {
     console.error('[PII Shield] Error during PII detection:', err);
-    // Reset session on error so it gets recreated
     aiSession = null;
-    return { anonymizedText: text, replacements: {}, hasPII: false };
+    return { anonymizedText: text, replacements: {}, hasPII: false, error: 'detection_failed' };
   }
 }
 
@@ -178,18 +176,8 @@ ${text}
 function deanonymize(text, tabId) {
   const tabMapping = mappings.get(tabId);
   if (!tabMapping || tabMapping.size === 0) return text;
-
-  let result = text;
-  // Sort by fake value length descending to avoid partial matches
-  const sortedEntries = [...tabMapping.entries()].sort(
-    ([a], [b]) => b.length - a.length
-  );
-
-  for (const [fake, original] of sortedEntries) {
-    result = result.split(fake).join(original);
-  }
-
-  return result;
+  const entries = buildReplacementEntries(tabMapping);
+  return applyReplacements(text, entries);
 }
 
 // ─── Storage ────────────────────────────────────────────────────────────────
@@ -199,15 +187,34 @@ async function saveMappings() {
   for (const [tabId, map] of mappings) {
     serializable[tabId] = Object.fromEntries(map);
   }
-  await chrome.storage.local.set({ piiMappings: serializable });
+  await chrome.storage.session.set({ piiMappings: serializable });
 }
 
 async function loadMappings() {
-  const result = await chrome.storage.local.get('piiMappings');
+  // Remove any legacy plaintext mappings from chrome.storage.local (pre-session-storage versions)
+  try { await chrome.storage.local.remove('piiMappings'); } catch (_) {}
+
+  const result = await chrome.storage.session.get('piiMappings');
   if (result.piiMappings) {
     for (const [tabId, obj] of Object.entries(result.piiMappings)) {
       mappings.set(tabId, new Map(Object.entries(obj)));
     }
+  }
+
+  // Drop mappings for tabs that no longer exist (cleanup after SW restart)
+  try {
+    const existingTabs = await chrome.tabs.query({});
+    const existingIds = new Set(existingTabs.map(t => String(t.id)));
+    let changed = false;
+    for (const tabId of [...mappings.keys()]) {
+      if (!existingIds.has(tabId)) {
+        mappings.delete(tabId);
+        changed = true;
+      }
+    }
+    if (changed) await saveMappings();
+  } catch (err) {
+    console.warn('[PII Shield] Orphan tab cleanup failed:', err);
   }
 }
 
@@ -234,7 +241,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then(result => sendResponse(result))
         .catch(err => {
           console.error('[PII Shield] Anonymization error:', err);
-          sendResponse({ anonymizedText: message.text, replacements: {}, hasPII: false });
+          sendResponse({ anonymizedText: message.text, replacements: {}, hasPII: false, error: 'detection_failed' });
         });
       return true; // Keep channel open for async response
     }
@@ -254,6 +261,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'CLEAR_MAPPINGS': {
       mappings.delete(tabId);
+      saveMappings();
+      sendResponse({ success: true });
+      return false;
+    }
+
+    case 'CLEAR_ALL_MAPPINGS': {
+      mappings.clear();
       saveMappings();
       sendResponse({ success: true });
       return false;
