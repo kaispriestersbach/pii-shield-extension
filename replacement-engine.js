@@ -38,24 +38,89 @@ export function buildReplacementEntries(map) {
 }
 
 /**
- * Apply replacements to a text. Word-like values (letters/hyphens) use a
- * Unicode-aware word boundary and preserve up to 2 trailing letters so that
- * German inflections ("Webers", "Müllern") are carried over to the replacement.
- * Everything else (emails, phone numbers, IBANs) uses exact substring match.
+ * Find non-overlapping replacement spans in the original text. Word-like
+ * values use Unicode-aware boundaries and preserve up to 2 trailing letters so
+ * that German inflections ("Webers", "Müllern") are carried over.
+ *
+ * Matches are selected on the original input before anything is replaced. This
+ * keeps replacements atomic: A -> B can never be transformed again by B -> C.
+ *
+ * @param {string} text
+ * @param {{from: string, to: string}[]} entries
+ * @returns {{start: number, end: number, replacement: string, from: string}[]}
  */
-export function applyReplacements(text, entries) {
-  let result = text;
-  for (const { from, to } of entries) {
+export function findReplacementSpans(text, entries) {
+  const candidates = [];
+
+  entries.forEach(({ from, to }, entryIndex) => {
+    if (!from || !to) return;
+
     if (WORD_LIKE.test(from)) {
       const escaped = from.replace(REGEX_META, '\\$&');
       const re = new RegExp(
         `(?<=^|[^\\p{L}\\p{N}_])${escaped}(\\p{L}{0,2})(?=$|[^\\p{L}\\p{N}_])`,
         'gu'
       );
-      result = result.replace(re, (_, suffix) => to + suffix);
-    } else {
-      result = result.split(from).join(to);
+      for (const match of text.matchAll(re)) {
+        candidates.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          replacement: to + (match[1] || ''),
+          from,
+          priority: entryIndex,
+        });
+      }
+      return;
     }
+
+    let start = text.indexOf(from);
+    while (start !== -1) {
+      candidates.push({
+        start,
+        end: start + from.length,
+        replacement: to,
+        from,
+        priority: entryIndex,
+      });
+      start = text.indexOf(from, start + Math.max(from.length, 1));
+    }
+  });
+
+  candidates.sort((a, b) => {
+    if (a.start !== b.start) return a.start - b.start;
+    const lengthDiff = (b.end - b.start) - (a.end - a.start);
+    if (lengthDiff !== 0) return lengthDiff;
+    return a.priority - b.priority;
+  });
+
+  const selected = [];
+  let lastEnd = -1;
+  for (const candidate of candidates) {
+    if (candidate.start < lastEnd) continue;
+    selected.push(candidate);
+    lastEnd = candidate.end;
   }
+
+  return selected.map(({ start, end, replacement, from }) => ({
+    start,
+    end,
+    replacement,
+    from,
+  }));
+}
+
+/**
+ * Apply replacements to a text atomically based on spans selected from the
+ * original input.
+ */
+export function applyReplacements(text, entries) {
+  const spans = findReplacementSpans(text, entries);
+  let result = text;
+
+  for (let i = spans.length - 1; i >= 0; i--) {
+    const span = spans[i];
+    result = result.slice(0, span.start) + span.replacement + result.slice(span.end);
+  }
+
   return result;
 }

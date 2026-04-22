@@ -2,7 +2,7 @@
 
 **Chrome Extension zum automatischen Schutz personenbezogener Daten (PII) bei der Nutzung von KI-Chatbots.**
 
-PII Shield erkennt personenbezogene Daten in der Zwischenablage, bevor sie in einen KI-Chatbot eingefügt werden, und ersetzt sie automatisch durch realistische, aber fiktive Alternativen. Beim Kopieren der Chatbot-Antwort werden die Originaldaten nahtlos wiederhergestellt. Die gesamte Verarbeitung findet lokal im Browser statt – dank Chrome Built-in AI (Gemini Nano).
+PII Shield erkennt personenbezogene Daten in der Zwischenablage, bevor sie in einen KI-Chatbot eingefügt werden, und ersetzt sie automatisch durch realistische, aber fiktive Alternativen. Beim Kopieren der Chatbot-Antwort werden bekannte Fake-Daten wiederhergestellt. Die Verarbeitung findet lokal im Browser statt – mit Chrome Built-in AI (Gemini Nano) und deterministischen Prüfern für strukturierte Daten.
 
 ---
 
@@ -12,9 +12,9 @@ Der Workflow von PII Shield lässt sich in drei Schritte unterteilen, die vollst
 
 | Schritt | Aktion | Beschreibung |
 |---------|--------|--------------|
-| **1. Einfügen** | `Ctrl+V` in den Chatbot | PII Shield fängt das Paste-Event ab, analysiert den Text mit Gemini Nano, erkennt PII und ersetzt sie durch plausible Fake-Daten. Der anonymisierte Text wird eingefügt. |
-| **2. Verarbeitung** | Chatbot arbeitet | Der KI-Chatbot verarbeitet ausschließlich die anonymisierten Daten. Keine echten personenbezogenen Daten verlassen den lokalen Rechner. |
-| **3. Kopieren** | Antwort markieren und kopieren | PII Shield erkennt beim Kopieren die Fake-Daten in der Antwort und stellt automatisch die Originaldaten in der Zwischenablage wieder her. |
+| **1. Einfügen** | `Ctrl+V` in den Chatbot | PII Shield fängt das Paste-Event ab, analysiert den Text lokal und ersetzt erkannte PII durch plausible Fake-Daten. Bei Analysefehlern wird das Einfügen blockiert. |
+| **2. Verarbeitung** | Chatbot arbeitet | Bei erfolgreicher Analyse erhält der Chatbot den anonymisierten Text. Originalwerte werden nicht in die DOM der Chatbot-Seite geschrieben. |
+| **3. Kopieren** | Antwort markieren und kopieren | PII Shield ersetzt bekannte Fake-Daten synchron im Copy-Event durch die lokal gespeicherten Originalwerte. |
 
 ### Beispiel
 
@@ -49,7 +49,7 @@ PII Shield erkennt und anonymisiert die folgenden Kategorien personenbezogener D
 | **IP-Adressen** | 192.168.1.100 |
 | **Firmennamen** | Wenn sie eine spezifische reale Firma identifizieren |
 
-Die Erkennung erfolgt kontextbasiert durch Gemini Nano, nicht durch starre Regex-Muster. Dadurch werden auch ungewöhnliche Formate und kontextabhängige PII erkannt.
+Die Erkennung kombiniert Gemini Nano mit deterministischen Prüfern für strukturierte PII wie E-Mail, IBAN, Kreditkarten, Telefonnummern, IP-Adressen und Datumswerte. Die KI-Erkennung bleibt probabilistisch; die deterministischen Prüfer decken nur klar strukturierte Kategorien ab.
 
 ---
 
@@ -104,17 +104,17 @@ PII Shield besteht aus drei Hauptkomponenten:
 
 Das Content Script wird in die unterstützten Chatbot-Seiten injiziert und übernimmt zwei zentrale Aufgaben:
 
-**Paste-Interception:** Das Script fängt das `paste`-Event in der Capture-Phase ab, bevor die Chatbot-Anwendung den Text verarbeitet. Der Text wird an den Service Worker zur PII-Analyse gesendet. Wird PII erkannt, wird der anonymisierte Text eingefügt; andernfalls der Originaltext.
+**Paste-Interception:** Das Script fängt das `paste`-Event in der Capture-Phase ab, bevor die Chatbot-Anwendung den Text verarbeitet. Der Text wird an den Service Worker zur PII-Analyse gesendet. Wird PII erkannt, wird der anonymisierte Text eingefügt; wenn die Analyse fehlschlägt, wird nichts eingefügt.
 
-**Copy-Interception:** Beim Kopieren von Text aus der Chatbot-Antwort prüft das Script, ob der kopierte Text bekannte Fake-Daten enthält. Falls ja, wird die Zwischenablage mit den wiederhergestellten Originaldaten überschrieben.
+**Copy-Interception:** Beim Kopieren von Text aus der Chatbot-Antwort prüft das Script mit einer lokalen Mapping-Kopie synchron, ob der kopierte Text bekannte Fake-Daten enthält. Falls ja, wird die Zwischenablage während desselben Copy-Events mit den wiederhergestellten Originaldaten beschrieben.
 
-Zusätzlich zeigt das Content Script visuelle Benachrichtigungen (Banner) an und stellt ein schwebendes Badge-Icon bereit, über das die Extension schnell aktiviert oder deaktiviert werden kann.
+Zusätzlich zeigt das Content Script datensparsame Benachrichtigungen (Banner) an und stellt ein schwebendes Badge-Icon bereit, über das die Extension schnell aktiviert oder deaktiviert werden kann. Der Banner enthält keine Original-PII und keine Mapping-Details.
 
 ### 2. Service Worker (`background.js`)
 
-Der Service Worker ist das Herzstück der PII-Erkennung. Er verwaltet eine Gemini Nano Session über die Chrome Prompt API (`LanguageModel.create()`) und nutzt einen speziell konfigurierten System-Prompt, der das Modell anweist, PII zu identifizieren und ein JSON-Mapping von Original- zu Fake-Werten zurückzugeben.
+Der Service Worker ist das Herzstück der PII-Erkennung. Er verwaltet eine Gemini Nano Session über die Chrome Prompt API (`LanguageModel.create()`) und nutzt strukturierte Prompt-Ausgaben per JSON Schema (`responseConstraint`), damit PII-Entities validierbar zurückkommen. Zusätzlich laufen deterministische Fallback-Detektoren für strukturierte PII.
 
-Das Mapping wird pro Tab gespeichert (`Map<tabId, Map<fake, original>>`), sodass mehrere Tabs unabhängig voneinander arbeiten können. Bei Tab-Schließung wird das zugehörige Mapping automatisch bereinigt. Alle Mappings werden zusätzlich in `chrome.storage.local` persistiert.
+Das Mapping wird pro Tab gespeichert (`Map<tabId, Map<fake, original>>`), sodass mehrere Tabs unabhängig voneinander arbeiten können. Die Werte liegen in `chrome.storage.session`, werden bei Tab-Schließung, Navigation, explizitem Löschen und nach Inaktivität bereinigt und nicht in `chrome.storage.local` persistiert.
 
 ### 3. Popup (`popup/`)
 
@@ -165,17 +165,19 @@ Das Popup bietet eine Übersicht über den aktuellen Status der Extension, die V
 
 PII Shield wurde mit einem strikten Privacy-by-Design-Ansatz entwickelt:
 
-- **Keine Datenübertragung:** Alle PII-Analysen finden lokal im Browser statt. Gemini Nano läuft vollständig on-device – keine Daten werden an Google oder Dritte gesendet.
+- **Keine Datenübertragung:** Alle PII-Analysen finden lokal im Browser statt. Gemini Nano läuft on-device; die Extension hat keine externen Netzwerk-Endpunkte.
 - **Keine externen Server:** Die Extension kommuniziert mit keinem externen Server. Es gibt kein Backend, keine Telemetrie, kein Tracking.
-- **Minimale Berechtigungen:** Die Extension benötigt nur `storage` (für Mappings), `clipboardRead` und `clipboardWrite` sowie Host-Permissions für die unterstützten Chatbot-Seiten.
-- **Tab-isolierte Mappings:** Jeder Tab hat sein eigenes Mapping. Bei Tab-Schließung werden die Daten automatisch gelöscht.
+- **Minimale Berechtigungen:** Die Extension benötigt nur `storage` sowie Host-Permissions für die unterstützten Chatbot-Seiten. Clipboard-Zugriffe erfolgen über echte Paste-/Copy-Events.
+- **Keine PII in der Host-DOM:** Content-Banner zeigen nur Statusmeldungen und Zähler, keine Originalwerte oder Mapping-Tabellen.
+- **Tab-isolierte Mappings:** Jeder Tab hat sein eigenes Mapping. Bei Tab-Schließung, Navigation, Clear-Aktion oder Inaktivität werden die Daten gelöscht.
 
 ---
 
 ## Einschränkungen
 
 - **Gemini Nano erforderlich:** Die Extension funktioniert nur in Chrome-Versionen, die die Prompt API unterstützen (Chrome 138+). Das Modell muss heruntergeladen sein.
-- **KI-basierte Erkennung:** Da die PII-Erkennung durch ein Sprachmodell erfolgt, kann es zu False Positives (fälschlich erkannte PII) oder False Negatives (übersehene PII) kommen. Die Erkennung ist nicht deterministisch.
+- **KI-basierte Erkennung:** Da ein Teil der PII-Erkennung durch ein Sprachmodell erfolgt, kann es zu False Positives (fälschlich erkannte PII) oder False Negatives (übersehene PII) kommen. Die deterministischen Prüfer verbessern strukturierte Kategorien, ersetzen aber keine vollständige Datenschutzprüfung.
+- **Fail-closed:** Wenn Gemini Nano nicht verfügbar ist, das Modell noch lädt, die strukturierte Antwort ungültig ist oder die Analyse timeoutet, wird der Paste-Vorgang blockiert.
 - **Textbasiert:** Aktuell werden nur Texteinfügungen über die Zwischenablage überwacht. Datei-Uploads werden nicht analysiert.
 - **Latenz:** Die PII-Analyse durch Gemini Nano kann je nach Hardware 1–5 Sekunden dauern. Während dieser Zeit wird das Einfügen blockiert.
 

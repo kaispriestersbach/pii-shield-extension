@@ -5,6 +5,24 @@ Stand von `main` (`8336e1c`). Einige Punkte aus der Review sind auf `main`
 bereits teilweise adressiert; der neue Hardening-Branch sollte die verbleibenden
 Risiken in kleinen, testbaren Schritten schließen.
 
+## Umsetzung in diesem Branch
+
+- Content-Banner schreibt keine Originalwerte oder Fake-Werte mehr in die
+  Webseiten-DOM.
+- Paste-Fehler sind fail-closed: bei AI-Fehler, Parsefehler oder Timeout wird
+  nichts eingefuegt.
+- Das Popup fragt den AI-Status ueber `GET_AI_STATUS` im Service Worker ab.
+- Copy-Deanonymisierung nutzt eine lokale Mapping-Kopie im Content Script und
+  laeuft synchron innerhalb des Copy-Events.
+- Mappings bleiben in `chrome.storage.session`, werden bei Tab-Schliessung,
+  Navigation, explizitem Clear und nach TTL bereinigt.
+- Die Prompt API nutzt strukturierte Ausgabe ueber `responseConstraint`.
+- Deterministische Detektoren fuer E-Mail, IBAN, Kreditkarte, Telefon, IP und
+  Datum ergaenzen die KI-Erkennung.
+- Die Replacement-Engine ersetzt atomar ueber Spans und verhindert Kaskaden.
+- `clipboardRead` und `clipboardWrite` wurden aus dem Manifest entfernt.
+- README und Tests wurden an die gehaertete Architektur angepasst.
+
 ## Status auf `main`
 
 - `chrome.storage.session` wird fuer PII-Mappings bereits verwendet; alte
