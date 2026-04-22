@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Gemini – Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #1c2128; color: #e6edf3; }
+    rich-textarea { display: block; }
+    .ql-editor {
+      width: 100%; min-height: 48px; padding: 12px;
+      background: #22272e; border: 1px solid #444c56; border-radius: 8px;
+      color: #e6edf3; font-size: 16px; outline: none;
+    }
+    .ql-editor p { margin: 0; }
+    #response-area { margin-top: 1rem; padding: 1rem; background: #161b22; border-radius: 8px; min-height: 80px; }
+  </style>
+</head>
+<body>
+  <h2>Gemini Fixture</h2>
+  <rich-textarea>
+    <div
+      class="ql-editor"
+      contenteditable="true"
+      data-placeholder="Ask Gemini"
+      role="textbox"
+      aria-multiline="true"
+    ><p><br></p></div>
+  </rich-textarea>
+  <div id="response-area" data-testid="response">
+    Max Mustermann schrieb an max@test.de eine Nachricht.
+  </div>
+</body>
+</html>

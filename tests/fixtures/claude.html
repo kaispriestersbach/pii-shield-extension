@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Claude – Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #1a1a2e; color: #e0e0e0; }
+    .ProseMirror {
+      width: 100%; min-height: 48px; padding: 12px;
+      background: #2a2a3e; border: 1px solid #4a4a6e; border-radius: 8px;
+      color: #e0e0e0; font-size: 16px; outline: none;
+    }
+    .ProseMirror p { margin: 0; }
+    #response-area { margin-top: 1rem; padding: 1rem; background: #111122; border-radius: 8px; min-height: 80px; }
+  </style>
+</head>
+<body>
+  <h2>Claude Fixture</h2>
+  <div
+    class="ProseMirror"
+    contenteditable="true"
+    role="textbox"
+    aria-multiline="true"
+    translate="no"
+  ><p><br></p></div>
+  <div id="response-area" data-testid="response">
+    Max Mustermann schrieb an max@test.de eine Nachricht.
+  </div>
+</body>
+</html>
