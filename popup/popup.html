@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PII Shield</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="popup-logo">
+        <span class="popup-logo-icon">🛡️</span>
+        <div class="popup-logo-text">
+          <h1>PII Shield</h1>
+          <span class="popup-subtitle">AI Privacy Guard</span>
+        </div>
+      </div>
+      <label class="popup-toggle">
+        <input type="checkbox" id="toggle-enabled" checked>
+        <span class="popup-toggle-slider"></span>
+      </label>
+    </header>
+
+    <!-- Status -->
+    <div class="popup-status" id="status-section">
+      <div class="popup-status-indicator" id="status-indicator">
+        <span class="popup-status-dot"></span>
+        <span class="popup-status-text" id="status-text">Aktiv</span>
+      </div>
+      <div class="popup-status-site" id="status-site"></div>
+    </div>
+
+    <!-- AI Status -->
+    <div class="popup-ai-status" id="ai-status-section">
+      <div class="popup-ai-status-icon" id="ai-status-icon">⏳</div>
+      <div class="popup-ai-status-text">
+        <span class="popup-ai-status-label">Gemini Nano</span>
+        <span class="popup-ai-status-value" id="ai-status-value">Wird geprüft…</span>
+      </div>
+    </div>
+
+    <!-- Current Mappings -->
+    <div class="popup-section" id="mappings-section">
+      <div class="popup-section-header">
+        <h2>Aktive Ersetzungen</h2>
+        <button class="popup-btn-small" id="btn-clear" title="Alle Ersetzungen löschen">
+          Löschen
+        </button>
+      </div>
+      <div class="popup-mappings" id="mappings-container">
+        <div class="popup-empty" id="mappings-empty">
+          Keine aktiven Ersetzungen für diesen Tab.
+        </div>
+        <table class="popup-table" id="mappings-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>Fake (gesendet)</th>
+              <th>Original (lokal)</th>
+            </tr>
+          </thead>
+          <tbody id="mappings-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Info -->
+    <div class="popup-section popup-info-section">
+      <h2>So funktioniert es</h2>
+      <div class="popup-info-steps">
+        <div class="popup-info-step">
+          <span class="popup-info-step-num">1</span>
+          <span>Beim <strong>Einfügen</strong> (Ctrl+V) werden PII erkannt und durch Fake-Daten ersetzt.</span>
+        </div>
+        <div class="popup-info-step">
+          <span class="popup-info-step-num">2</span>
+          <span>Der Chatbot arbeitet mit den <strong>anonymisierten</strong> Daten.</span>
+        </div>
+        <div class="popup-info-step">
+          <span class="popup-info-step-num">3</span>
+          <span>Beim <strong>Kopieren</strong> der Antwort werden die Originaldaten automatisch wiederhergestellt.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Supported Sites -->
+    <div class="popup-section">
+      <h2>Unterstützte Seiten</h2>
+      <div class="popup-sites">
+        <span class="popup-site-tag">ChatGPT</span>
+        <span class="popup-site-tag">Claude</span>
+        <span class="popup-site-tag">Gemini</span>
+        <span class="popup-site-tag">Mistral</span>
+        <span class="popup-site-tag">Copilot</span>
+        <span class="popup-site-tag">DeepSeek</span>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <span>Powered by Chrome Built-in AI (Gemini Nano)</span>
+      <span>v1.0.0</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

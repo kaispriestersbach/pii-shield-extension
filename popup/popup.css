@@ -1,0 +1,372 @@
+/* ─── PII Shield – Popup Styles ──────────────────────────────────────────── */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 380px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: #0d1117;
+  color: #c9d1d9;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.popup-container {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────────── */
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: linear-gradient(135deg, #161b22, #0d1117);
+  border-bottom: 1px solid #21262d;
+}
+
+.popup-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.popup-logo-icon {
+  font-size: 28px;
+}
+
+.popup-logo-text h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f0f6fc;
+  letter-spacing: 0.3px;
+}
+
+.popup-subtitle {
+  font-size: 11px;
+  color: #8b949e;
+  font-weight: 400;
+}
+
+/* Toggle Switch */
+.popup-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.popup-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.popup-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #30363d;
+  transition: 0.3s;
+  border-radius: 24px;
+}
+
+.popup-toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #8b949e;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.popup-toggle input:checked + .popup-toggle-slider {
+  background-color: #1f6feb;
+}
+
+.popup-toggle input:checked + .popup-toggle-slider::before {
+  transform: translateX(20px);
+  background-color: #ffffff;
+}
+
+/* ─── Status ─────────────────────────────────────────────────────────────── */
+
+.popup-status {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+}
+
+.popup-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popup-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.4);
+}
+
+.popup-status.disabled .popup-status-dot {
+  background: #8b949e;
+  box-shadow: none;
+}
+
+.popup-status-text {
+  font-weight: 500;
+  color: #f0f6fc;
+}
+
+.popup-status-site {
+  font-size: 12px;
+  color: #8b949e;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── AI Status ──────────────────────────────────────────────────────────── */
+
+.popup-ai-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(31, 111, 235, 0.06);
+  border-bottom: 1px solid #21262d;
+}
+
+.popup-ai-status-icon {
+  font-size: 18px;
+}
+
+.popup-ai-status-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.popup-ai-status-label {
+  font-size: 11px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.popup-ai-status-value {
+  font-size: 12px;
+  color: #c9d1d9;
+}
+
+.popup-ai-status.available .popup-ai-status-value {
+  color: #3fb950;
+}
+
+.popup-ai-status.unavailable .popup-ai-status-value {
+  color: #f85149;
+}
+
+/* ─── Sections ───────────────────────────────────────────────────────────── */
+
+.popup-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid #21262d;
+}
+
+.popup-section h2 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.popup-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.popup-section-header h2 {
+  margin-bottom: 0;
+}
+
+.popup-btn-small {
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.2);
+  color: #f85149;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.popup-btn-small:hover {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: rgba(248, 81, 73, 0.4);
+}
+
+/* ─── Mappings Table ─────────────────────────────────────────────────────── */
+
+.popup-mappings {
+  max-height: 180px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid #21262d;
+  background: #0d1117;
+}
+
+.popup-empty {
+  padding: 20px;
+  text-align: center;
+  color: #484f58;
+  font-size: 12px;
+}
+
+.popup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.popup-table thead th {
+  text-align: left;
+  padding: 8px 10px;
+  background: #161b22;
+  color: #8b949e;
+  font-weight: 500;
+  font-size: 11px;
+  position: sticky;
+  top: 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.popup-table tbody td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #21262d;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.popup-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.popup-table tbody td:first-child {
+  color: #79c0ff;
+}
+
+.popup-table tbody td:last-child {
+  color: #ffa657;
+}
+
+/* Scrollbar */
+.popup-mappings::-webkit-scrollbar {
+  width: 6px;
+}
+
+.popup-mappings::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.popup-mappings::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+
+/* ─── Info Steps ─────────────────────────────────────────────────────────── */
+
+.popup-info-section {
+  background: rgba(31, 111, 235, 0.03);
+}
+
+.popup-info-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.popup-info-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.popup-info-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #1f6feb;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.popup-info-step span {
+  font-size: 12px;
+  color: #8b949e;
+  line-height: 1.5;
+}
+
+.popup-info-step strong {
+  color: #c9d1d9;
+}
+
+/* ─── Supported Sites ────────────────────────────────────────────────────── */
+
+.popup-sites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.popup-site-tag {
+  background: #21262d;
+  color: #8b949e;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid #30363d;
+}
+
+/* ─── Footer ─────────────────────────────────────────────────────────────── */
+
+.popup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  font-size: 10px;
+  color: #484f58;
+  background: #0d1117;
+}
