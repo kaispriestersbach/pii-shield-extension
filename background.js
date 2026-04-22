@@ -77,6 +77,63 @@ Example response format:
   }
 }
 
+// ─── Replacement Engine ─────────────────────────────────────────────────────
+
+/**
+ * Build a flat list of replacement entries from a Map<from, to>.
+ * For multi-word name-like values, also emits per-component entries so that
+ * partial references ("Weber" instead of "Thomas Weber") are still replaced.
+ */
+function buildReplacementEntries(map) {
+  const entries = [];
+  const NAME_PART = /^[\p{L}\-]+$/u;
+
+  for (const [from, to] of map) {
+    if (!from || !to) continue;
+    entries.push({ from, to });
+
+    const fromParts = from.split(/\s+/);
+    const toParts = to.split(/\s+/);
+    if (fromParts.length === toParts.length && fromParts.length >= 2) {
+      for (let i = 0; i < fromParts.length; i++) {
+        if (fromParts[i].length >= 3 && toParts[i].length >= 2 &&
+            NAME_PART.test(fromParts[i]) && NAME_PART.test(toParts[i])) {
+          entries.push({ from: fromParts[i], to: toParts[i] });
+        }
+      }
+    }
+  }
+
+  // Longest first so "Thomas Weber" wins over "Weber" alone.
+  entries.sort((a, b) => b.from.length - a.from.length);
+  return entries;
+}
+
+/**
+ * Apply replacements to a text. Word-like values (letters/hyphens) use a
+ * Unicode-aware word boundary and preserve up to 2 trailing letters so that
+ * German inflections ("Webers", "Müllern") are carried over to the replacement.
+ * Everything else (emails, phone numbers, IBANs) uses exact substring match.
+ */
+function applyReplacements(text, entries) {
+  const WORD_LIKE = /^[\p{L}\p{N}\s\-]+$/u;
+  let result = text;
+
+  for (const { from, to } of entries) {
+    if (WORD_LIKE.test(from)) {
+      const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(
+        `(?<=^|[^\\p{L}\\p{N}_])${escaped}(\\p{L}{0,2})(?=$|[^\\p{L}\\p{N}_])`,
+        'gu'
+      );
+      result = result.replace(re, (_, suffix) => to + suffix);
+    } else {
+      result = result.split(from).join(to);
+    }
+  }
+  return result;
+}
+
 // ─── PII Detection & Anonymization ─────────────────────────────────────────
 
 /**
@@ -89,8 +146,7 @@ async function detectAndAnonymize(text, tabId) {
   const session = await getAISession();
 
   if (!session) {
-    // Fallback: return text unchanged if AI is not available
-    return { anonymizedText: text, replacements: {}, hasPII: false };
+    return { anonymizedText: text, replacements: {}, hasPII: false, error: 'ai_unavailable' };
   }
 
   try {
@@ -122,10 +178,10 @@ ${text}
           replacements = JSON.parse(jsonMatch[0]);
         } catch (e) {
           console.error('[PII Shield] Could not extract JSON from response.');
-          return { anonymizedText: text, replacements: {}, hasPII: false };
+          return { anonymizedText: text, replacements: {}, hasPII: false, error: 'parse_failed' };
         }
       } else {
-        return { anonymizedText: text, replacements: {}, hasPII: false };
+        return { anonymizedText: text, replacements: {}, hasPII: false, error: 'parse_failed' };
       }
     }
 
@@ -141,19 +197,17 @@ ${text}
     }
     const tabMapping = mappings.get(tabId);
 
-    // Apply replacements to text (sort by length descending to avoid partial matches)
-    let anonymizedText = text;
-    const sortedEntries = Object.entries(replacements).sort(
-      ([a], [b]) => b.length - a.length
-    );
-
-    for (const [original, fake] of sortedEntries) {
+    // Store reverse mapping (fake → real) for later de-anonymization.
+    const origToFake = new Map();
+    for (const [original, fake] of Object.entries(replacements)) {
       if (!original || !fake) continue;
-      // Store reverse mapping: fake → original
+      origToFake.set(original, fake);
       tabMapping.set(fake, original);
-      // Replace all occurrences
-      anonymizedText = anonymizedText.split(original).join(fake);
     }
+
+    // Apply replacements with Unicode-aware word boundaries + inflection support.
+    const entries = buildReplacementEntries(origToFake);
+    const anonymizedText = applyReplacements(text, entries);
 
     // Persist mapping to storage
     await saveMappings();
@@ -163,9 +217,8 @@ ${text}
 
   } catch (err) {
     console.error('[PII Shield] Error during PII detection:', err);
-    // Reset session on error so it gets recreated
     aiSession = null;
-    return { anonymizedText: text, replacements: {}, hasPII: false };
+    return { anonymizedText: text, replacements: {}, hasPII: false, error: 'detection_failed' };
   }
 }
 
@@ -178,18 +231,8 @@ ${text}
 function deanonymize(text, tabId) {
   const tabMapping = mappings.get(tabId);
   if (!tabMapping || tabMapping.size === 0) return text;
-
-  let result = text;
-  // Sort by fake value length descending to avoid partial matches
-  const sortedEntries = [...tabMapping.entries()].sort(
-    ([a], [b]) => b.length - a.length
-  );
-
-  for (const [fake, original] of sortedEntries) {
-    result = result.split(fake).join(original);
-  }
-
-  return result;
+  const entries = buildReplacementEntries(tabMapping);
+  return applyReplacements(text, entries);
 }
 
 // ─── Storage ────────────────────────────────────────────────────────────────
@@ -199,15 +242,34 @@ async function saveMappings() {
   for (const [tabId, map] of mappings) {
     serializable[tabId] = Object.fromEntries(map);
   }
-  await chrome.storage.local.set({ piiMappings: serializable });
+  await chrome.storage.session.set({ piiMappings: serializable });
 }
 
 async function loadMappings() {
-  const result = await chrome.storage.local.get('piiMappings');
+  // Remove any legacy plaintext mappings from chrome.storage.local (pre-session-storage versions)
+  try { await chrome.storage.local.remove('piiMappings'); } catch (_) {}
+
+  const result = await chrome.storage.session.get('piiMappings');
   if (result.piiMappings) {
     for (const [tabId, obj] of Object.entries(result.piiMappings)) {
       mappings.set(tabId, new Map(Object.entries(obj)));
     }
+  }
+
+  // Drop mappings for tabs that no longer exist (cleanup after SW restart)
+  try {
+    const existingTabs = await chrome.tabs.query({});
+    const existingIds = new Set(existingTabs.map(t => String(t.id)));
+    let changed = false;
+    for (const tabId of [...mappings.keys()]) {
+      if (!existingIds.has(tabId)) {
+        mappings.delete(tabId);
+        changed = true;
+      }
+    }
+    if (changed) await saveMappings();
+  } catch (err) {
+    console.warn('[PII Shield] Orphan tab cleanup failed:', err);
   }
 }
 
@@ -234,7 +296,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then(result => sendResponse(result))
         .catch(err => {
           console.error('[PII Shield] Anonymization error:', err);
-          sendResponse({ anonymizedText: message.text, replacements: {}, hasPII: false });
+          sendResponse({ anonymizedText: message.text, replacements: {}, hasPII: false, error: 'detection_failed' });
         });
       return true; // Keep channel open for async response
     }
