@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
   applyReplacements,
   buildReplacementEntries,
+  findReplacementSpans,
 } from '../replacement-engine.js';
 
 let passed = 0;
@@ -165,19 +166,43 @@ test('handles hyphenated words as word-like', () => {
 });
 
 test('does not incorrectly chain replacements (A→B then B→C)', () => {
-  // If "Weber" maps to "Mustermann" and "Mustermann" also appears in the text,
-  // the second rule should still apply to the original occurrence but not
-  // re-transform the result of the first rule.
-  // Our engine does a single left-to-right pass per entry, so once "Weber"
-  // becomes "Mustermann", a subsequent "Mustermann → Schmidt" rule WILL also
-  // hit it. We document this here so the limitation is visible.
   const out = applyReplacements('Weber und Mustermann.', [
-    { from: 'Mustermann', to: 'Schmidt' },
     { from: 'Weber', to: 'Mustermann' },
+    { from: 'Mustermann', to: 'Schmidt' },
   ]);
-  // Given current ordering, 'Mustermann' is replaced first → 'Schmidt',
-  // then 'Weber' → 'Mustermann'. Final result has no double-hop.
   assert.equal(out, 'Mustermann und Schmidt.');
+});
+
+test('does not cascade city replacements', () => {
+  const out = applyReplacements('Berlin und München sind Städte.', [
+    { from: 'Berlin', to: 'München' },
+    { from: 'München', to: 'Köln' },
+  ]);
+  assert.equal(out, 'München und Köln sind Städte.');
+});
+
+test('prefers the longest overlapping match at the same position', () => {
+  const out = applyReplacements('Thomas Weber unterschreibt.', [
+    { from: 'Thomas', to: 'Max' },
+    { from: 'Thomas Weber', to: 'Max Mustermann' },
+  ]);
+  assert.equal(out, 'Max Mustermann unterschreibt.');
+});
+
+// ─── findReplacementSpans ──────────────────────────────────────────────────
+
+section('findReplacementSpans');
+
+test('returns spans from the original text', () => {
+  const spans = findReplacementSpans('Weber und Mustermann.', [
+    { from: 'Weber', to: 'Mustermann' },
+    { from: 'Mustermann', to: 'Schmidt' },
+  ]);
+
+  assert.deepEqual(spans, [
+    { start: 0, end: 5, replacement: 'Mustermann', from: 'Weber' },
+    { start: 10, end: 20, replacement: 'Schmidt', from: 'Mustermann' },
+  ]);
 });
 
 // ─── Summary ────────────────────────────────────────────────────────────────

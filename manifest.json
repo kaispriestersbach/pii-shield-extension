@@ -4,9 +4,7 @@
   "version": "1.0.0",
   "description": "Automatically detects and anonymizes personally identifiable information (PII) before pasting into AI chatbots. Reverses anonymization when copying responses. Powered by Chrome Built-in AI (Gemini Nano).",
   "permissions": [
-    "storage",
-    "clipboardRead",
-    "clipboardWrite"
+    "storage"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",

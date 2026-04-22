@@ -20,6 +20,8 @@
   let pasteWorkerRunning = false;
   // Guards the copy interceptor from re-entering itself when we rewrite clipboard.
   let copyProcessing = false;
+  const localMappings = new Map();
+  let localMappingsTouchedAt = 0;
 
   // Quick regex prefilter — when any of these match, we always scan the paste
   // even if it's shorter than the default length threshold.
@@ -29,6 +31,11 @@
     /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/,       // IBAN
     /\b(?:\d[ -]?){13,19}\b/,                 // credit card
   ];
+
+  const WORD_LIKE = /^[\p{L}\p{N}\s\-]+$/u;
+  const NAME_PART = /^[\p{L}\-]+$/u;
+  const REGEX_META = /[.*+?^${}()|[\]\\]/g;
+  const LOCAL_MAPPING_TTL_MS = 30 * 60 * 1000;
 
   function shouldScanPaste(text) {
     const trimmed = text.trim();
@@ -41,6 +48,7 @@
     switch (code) {
       case 'ai_unavailable': return 'Gemini Nano ist nicht verfügbar.';
       case 'parse_failed':   return 'Die KI-Antwort konnte nicht ausgewertet werden.';
+      case 'timeout': return 'Die PII-Analyse hat zu lange gedauert.';
       case 'detection_failed': return 'Die PII-Analyse ist fehlgeschlagen.';
       default: return 'Unbekannter Fehler bei der PII-Analyse.';
     }
@@ -59,6 +67,12 @@
     }
   });
 
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'PII_MAPPINGS_UPDATED') {
+      replaceLocalMappings(message.mappings || {});
+    }
+  });
+
   // ─── Notification Banner ──────────────────────────────────────────────────
 
   function createNotificationBanner() {
@@ -72,54 +86,27 @@
     return banner;
   }
 
-  function showNotification(message, type = 'info', replacements = null) {
+  function showNotification(message, type = 'info') {
     const banner = createNotificationBanner();
 
     const confidenceHint = type === 'anonymized'
-      ? '<span class="pii-shield-banner-hint">KI-basiert — bitte stichprobenartig prüfen.</span>'
+      ? '<span class="pii-shield-banner-hint">Lokal anonymisiert — Details nur im Extension-Popup.</span>'
       : '';
 
-    let html = `
+    const icon = type === 'anonymized' ? '🛡️' : type === 'deanonymized' ? '🔓' : 'ℹ️';
+
+    const html = `
       <div class="pii-shield-banner-content">
         <div class="pii-shield-banner-icon">
-          ${type === 'anonymized' ? '🛡️' : type === 'deanonymized' ? '🔓' : 'ℹ️'}
+          ${icon}
         </div>
         <div class="pii-shield-banner-text">
           <strong>PII Shield</strong>
           <span>${escapeHtml(message)}</span>
           ${confidenceHint}
-        </div>`;
-
-    if (replacements && Object.keys(replacements).length > 0) {
-      html += `
-        <button class="pii-shield-banner-toggle" id="pii-shield-toggle-details">
-          Details ▼
-        </button>`;
-    }
-
-    html += `
+        </div>
         <button class="pii-shield-banner-close" id="pii-shield-close">✕</button>
       </div>`;
-
-    if (replacements && Object.keys(replacements).length > 0) {
-      html += `
-        <div class="pii-shield-banner-details" id="pii-shield-details" style="display:none;">
-          <table class="pii-shield-table">
-            <thead>
-              <tr><th>Original</th><th>→</th><th>Ersetzt durch</th></tr>
-            </thead>
-            <tbody>
-              ${Object.entries(replacements).map(([orig, fake]) =>
-                `<tr>
-                  <td class="pii-shield-original">${escapeHtml(orig)}</td>
-                  <td>→</td>
-                  <td class="pii-shield-fake">${escapeHtml(fake)}</td>
-                </tr>`
-              ).join('')}
-            </tbody>
-          </table>
-        </div>`;
-    }
 
     banner.innerHTML = html;
     banner.className = `pii-shield-banner pii-shield-banner-${type} pii-shield-banner-visible`;
@@ -129,16 +116,6 @@
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         banner.className = 'pii-shield-banner';
-      });
-    }
-
-    const toggleBtn = document.getElementById('pii-shield-toggle-details');
-    const details = document.getElementById('pii-shield-details');
-    if (toggleBtn && details) {
-      toggleBtn.addEventListener('click', () => {
-        const isVisible = details.style.display !== 'none';
-        details.style.display = isVisible ? 'none' : 'block';
-        toggleBtn.textContent = isVisible ? 'Details ▼' : 'Details ▲';
       });
     }
 
@@ -222,42 +199,32 @@
       const result = await sendMessage({ type: 'ANONYMIZE_TEXT', text });
 
       if (result && result.error) {
-        // Analysis failed — ask user before leaking potentially sensitive text.
-        // Default (Abbrechen) = do NOT insert the original text.
-        const proceed = window.confirm(
-          `PII Shield: ${errorMessageFor(result.error)}\n\n` +
-          `Originaltext trotzdem einfügen?\n\n` +
-          `Abbrechen wird empfohlen, falls der Text personenbezogene Daten enthält.`
-        );
-        if (proceed) {
-          insertTextAtTarget(target, text);
-        } else {
-          showNotification('Einfügen abgebrochen — PII-Analyse fehlgeschlagen.', 'info');
-        }
+        showNotification(`Einfügen blockiert: ${errorMessageFor(result.error)}`, 'info');
       } else if (result && result.hasPII) {
+        const replacements = result.replacements || {};
         insertTextAtTarget(target, result.anonymizedText);
+        addReplacementsToLocalMappings(replacements);
         showNotification(
-          `${Object.keys(result.replacements).length} PII-Element(e) erkannt und anonymisiert.`,
-          'anonymized',
-          result.replacements
+          `${Object.keys(replacements).length} PII-Element(e) erkannt und anonymisiert.`,
+          'anonymized'
         );
-      } else {
+      } else if (result) {
         insertTextAtTarget(target, text);
+      } else {
+        showNotification('Einfügen blockiert: Keine Antwort vom Service Worker.', 'info');
       }
     } catch (err) {
       console.error('[PII Shield] Error processing paste:', err);
-      const proceed = window.confirm(
-        `PII Shield: Kommunikation mit dem Service Worker fehlgeschlagen.\n\n` +
-        `Originaltext trotzdem einfügen?`
-      );
-      if (proceed) insertTextAtTarget(target, text);
+      showNotification('Einfügen blockiert: Service Worker nicht erreichbar.', 'info');
     }
   }
 
   // ─── Copy Interception (De-Anonymization) ─────────────────────────────────
 
-  document.addEventListener('copy', async (event) => {
+  document.addEventListener('copy', (event) => {
     if (!isEnabled || copyProcessing) return;
+    pruneLocalMappingsIfExpired();
+    if (!event.clipboardData || localMappings.size === 0) return;
 
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
@@ -268,14 +235,12 @@
     copyProcessing = true;
 
     try {
-      const result = await sendMessage({
-        type: 'DEANONYMIZE_TEXT',
-        text: selectedText
-      });
+      const deanonymizedText = deanonymizeWithLocalMappings(selectedText);
 
-      if (result && result.deanonymizedText !== selectedText) {
+      if (deanonymizedText !== selectedText) {
         event.preventDefault();
-        event.clipboardData.setData('text/plain', result.deanonymizedText);
+        event.stopImmediatePropagation();
+        event.clipboardData.setData('text/plain', deanonymizedText);
 
         showNotification(
           'Anonymisierte Daten in der Antwort wurden wiederhergestellt.',
@@ -288,6 +253,134 @@
       copyProcessing = false;
     }
   }, true);
+
+  // ─── Local Mapping Mirror (Synchronous Copy Path) ─────────────────────────
+
+  function replaceLocalMappings(mappings) {
+    localMappings.clear();
+    for (const [fake, original] of Object.entries(mappings)) {
+      if (fake && original) {
+        localMappings.set(fake, original);
+      }
+    }
+    localMappingsTouchedAt = localMappings.size > 0 ? Date.now() : 0;
+  }
+
+  function addReplacementsToLocalMappings(replacements) {
+    for (const [original, fake] of Object.entries(replacements)) {
+      if (fake && original) {
+        localMappings.set(fake, original);
+      }
+    }
+    if (localMappings.size > 0) {
+      localMappingsTouchedAt = Date.now();
+    }
+  }
+
+  function pruneLocalMappingsIfExpired() {
+    if (!localMappingsTouchedAt) return;
+    if (Date.now() - localMappingsTouchedAt <= LOCAL_MAPPING_TTL_MS) return;
+    localMappings.clear();
+    localMappingsTouchedAt = 0;
+  }
+
+  async function refreshLocalMappings() {
+    try {
+      const response = await sendMessage({ type: 'GET_MAPPINGS' });
+      replaceLocalMappings(response?.mappings || {});
+    } catch (err) {
+      console.warn('[PII Shield] Could not refresh local mappings:', err);
+      localMappings.clear();
+    }
+  }
+
+  function deanonymizeWithLocalMappings(text) {
+    return applyLocalReplacements(text, buildLocalReplacementEntries(localMappings));
+  }
+
+  function buildLocalReplacementEntries(map) {
+    const entries = [];
+    for (const [from, to] of map) {
+      if (!from || !to) continue;
+      entries.push({ from, to });
+
+      const fromParts = from.split(/\s+/);
+      const toParts = to.split(/\s+/);
+      if (fromParts.length === toParts.length && fromParts.length >= 2) {
+        for (let i = 0; i < fromParts.length; i++) {
+          if (fromParts[i].length >= 3 && toParts[i].length >= 2 &&
+              NAME_PART.test(fromParts[i]) && NAME_PART.test(toParts[i])) {
+            entries.push({ from: fromParts[i], to: toParts[i] });
+          }
+        }
+      }
+    }
+    entries.sort((a, b) => b.from.length - a.from.length);
+    return entries;
+  }
+
+  function applyLocalReplacements(text, entries) {
+    const spans = findLocalReplacementSpans(text, entries);
+    let result = text;
+    for (let i = spans.length - 1; i >= 0; i--) {
+      const span = spans[i];
+      result = result.slice(0, span.start) + span.replacement + result.slice(span.end);
+    }
+    return result;
+  }
+
+  function findLocalReplacementSpans(text, entries) {
+    const candidates = [];
+
+    entries.forEach(({ from, to }, entryIndex) => {
+      if (!from || !to) return;
+
+      if (WORD_LIKE.test(from)) {
+        const escaped = from.replace(REGEX_META, '\\$&');
+        const re = new RegExp(
+          `(?<=^|[^\\p{L}\\p{N}_])${escaped}(\\p{L}{0,2})(?=$|[^\\p{L}\\p{N}_])`,
+          'gu'
+        );
+        for (const match of text.matchAll(re)) {
+          candidates.push({
+            start: match.index,
+            end: match.index + match[0].length,
+            replacement: to + (match[1] || ''),
+            priority: entryIndex,
+          });
+        }
+        return;
+      }
+
+      let start = text.indexOf(from);
+      while (start !== -1) {
+        candidates.push({
+          start,
+          end: start + from.length,
+          replacement: to,
+          priority: entryIndex,
+        });
+        start = text.indexOf(from, start + Math.max(from.length, 1));
+      }
+    });
+
+    candidates.sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start;
+      const lengthDiff = (b.end - b.start) - (a.end - a.start);
+      if (lengthDiff !== 0) return lengthDiff;
+      return a.priority - b.priority;
+    });
+
+    const selected = [];
+    let lastEnd = -1;
+    for (const candidate of candidates) {
+      if (candidate.start < lastEnd) continue;
+      selected.push(candidate);
+      lastEnd = candidate.end;
+    }
+
+    return selected;
+  }
 
   // ─── Helper: Insert Text at Cursor ────────────────────────────────────────
 
@@ -424,10 +517,14 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       updateBadge();
+      refreshLocalMappings();
     });
   } else {
     updateBadge();
+    refreshLocalMappings();
   }
+
+  setInterval(pruneLocalMappingsIfExpired, 60 * 1000);
 
   console.log('[PII Shield] Content script loaded on', window.location.hostname);
 })();

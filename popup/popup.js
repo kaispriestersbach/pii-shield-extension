@@ -73,26 +73,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function checkAIStatus() {
     try {
-      // We check from the popup context – this may not work in all cases
-      // since LanguageModel may only be available in the service worker
-      if (typeof LanguageModel !== 'undefined') {
-        const availability = await LanguageModel.availability();
-        updateAIStatusUI(availability);
-      } else {
-        // Try to check via service worker
-        aiStatusIcon.textContent = 'ℹ️';
-        aiStatusValue.textContent = 'Prüfung über Service Worker…';
-        aiStatusSection.className = 'popup-ai-status';
+      aiStatusIcon.textContent = 'ℹ️';
+      aiStatusValue.textContent = 'Prüfung im Service Worker…';
+      aiStatusSection.className = 'popup-ai-status';
 
-        // Send a test message to check if the background can access AI
-        chrome.runtime.sendMessage({ type: 'GET_STATUS' }, (response) => {
-          if (response) {
-            aiStatusIcon.textContent = '✅';
-            aiStatusValue.textContent = 'Service Worker bereit';
-            aiStatusSection.className = 'popup-ai-status available';
-          }
-        });
-      }
+      chrome.runtime.sendMessage({ type: 'GET_AI_STATUS' }, (response) => {
+        if (chrome.runtime.lastError || !response) {
+          updateAIStatusUI('error');
+          return;
+        }
+        updateAIStatusUI(response.availability, response.reason);
+      });
     } catch (err) {
       aiStatusIcon.textContent = '❌';
       aiStatusValue.textContent = 'Nicht verfügbar';
@@ -100,7 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function updateAIStatusUI(availability) {
+  function updateAIStatusUI(availability, reason = '') {
     switch (availability) {
       case 'available':
         aiStatusIcon.textContent = '✅';
@@ -114,8 +105,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         break;
       case 'downloadable':
         aiStatusIcon.textContent = '📥';
-        aiStatusValue.textContent = 'Modell verfügbar, noch nicht geladen';
+        aiStatusValue.textContent = 'Modell noch nicht geladen';
         aiStatusSection.className = 'popup-ai-status';
+        break;
+      case 'error':
+        aiStatusIcon.textContent = '❌';
+        aiStatusValue.textContent = reason ? `Fehler: ${reason}` : 'Statusprüfung fehlgeschlagen';
+        aiStatusSection.className = 'popup-ai-status unavailable';
         break;
       default:
         aiStatusIcon.textContent = '❌';
