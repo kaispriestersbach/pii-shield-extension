@@ -17,13 +17,20 @@ const PII_TEXT  = 'Max Mustermann, max@test.de';
 const SAFE_TEXT = 'Hallo, wie geht es dir heute? Das ist ein langer Satz.';
 
 const CHATBOTS = [
-  { name: 'chatgpt',    selector: '#prompt-textarea', type: 'contenteditable' },
-  { name: 'claude',     selector: '.ProseMirror',     type: 'contenteditable' },
-  { name: 'gemini',     selector: '.ql-editor',       type: 'contenteditable' },
-  { name: 'mistral',    selector: 'textarea',         type: 'textarea' },
-  { name: 'copilot',    selector: 'textarea',         type: 'textarea' },
-  { name: 'deepseek',   selector: 'textarea',         type: 'textarea' },
-  { name: 'perplexity', selector: 'textarea',         type: 'textarea' },
+  { name: 'chatgpt',     selector: '#prompt-textarea',   type: 'contenteditable' },
+  { name: 'claude',      selector: '.ProseMirror',       type: 'contenteditable' },
+  { name: 'gemini',      selector: '.ql-editor',         type: 'contenteditable' },
+  { name: 'mistral',     selector: 'textarea',           type: 'textarea' },
+  { name: 'copilot',     selector: 'textarea',           type: 'textarea' },
+  { name: 'deepseek',    selector: 'textarea',           type: 'textarea' },
+  { name: 'perplexity',  selector: 'textarea',           type: 'textarea' },
+  { name: 'grok',        selector: 'textarea',           type: 'textarea' },
+  { name: 'poe',         selector: 'textarea',           type: 'textarea' },
+  { name: 'meta',        selector: '[contenteditable]',  type: 'contenteditable' },
+  { name: 'huggingface', selector: 'textarea',           type: 'textarea' },
+  { name: 'phind',       selector: 'textarea',           type: 'textarea' },
+  { name: 'you',         selector: 'textarea',           type: 'textarea' },
+  { name: 'qwen',        selector: 'textarea',           type: 'textarea' },
 ] as const;
 
 /**

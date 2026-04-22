@@ -55,14 +55,31 @@ Die Erkennung erfolgt kontextbasiert durch Gemini Nano, nicht durch starre Regex
 
 ## Unterstützte Plattformen
 
-PII Shield ist auf folgenden KI-Chatbot-Plattformen aktiv:
+PII Shield ist auf 14 KI-Chatbot- und KI-Such-Plattformen aktiv:
 
-- **ChatGPT** – chatgpt.com / chat.openai.com
-- **Claude** – claude.ai
-- **Gemini** – gemini.google.com
-- **Mistral** – chat.mistral.ai
-- **Copilot** – copilot.microsoft.com
-- **DeepSeek** – chat.deepseek.com
+### Chatbots
+
+| Plattform | Anbieter | Domain |
+|-----------|----------|--------|
+| **ChatGPT** | OpenAI | `chatgpt.com`, `chat.openai.com` |
+| **Claude** | Anthropic | `claude.ai` |
+| **Gemini** | Google | `gemini.google.com` |
+| **Copilot** | Microsoft | `copilot.microsoft.com` |
+| **Mistral / Le Chat** | Mistral | `chat.mistral.ai` |
+| **DeepSeek** | DeepSeek | `chat.deepseek.com` |
+| **Grok** | xAI | `grok.com` |
+| **Meta AI** | Meta | `www.meta.ai` |
+| **Poe** | Quora | `poe.com` |
+| **HuggingFace Chat** | HuggingFace | `huggingface.co/chat` |
+| **Qwen Chat** | Alibaba | `chat.qwen.ai` |
+
+### KI-Suchmaschinen
+
+| Plattform | Fokus | Domain |
+|-----------|-------|--------|
+| **Perplexity** | KI-Suche, Recherche | `www.perplexity.ai` |
+| **You.com** | KI-Suche | `you.com` |
+| **Phind** | KI-Suche für Entwickler | `www.phind.com` |
 
 ---
 

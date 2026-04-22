@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Meta AI – Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #18191a; color: #e4e6eb; }
+    [contenteditable] {
+      width: 100%; min-height: 48px; padding: 12px;
+      background: #242526; border: 1px solid #3e4042; border-radius: 20px;
+      color: #e4e6eb; font-size: 16px; outline: none;
+    }
+    #response-area { margin-top: 1rem; padding: 1rem; background: #0f0f10; border-radius: 8px; min-height: 80px; }
+  </style>
+</head>
+<body>
+  <h2>Meta AI Fixture</h2>
+  <div
+    contenteditable="true"
+    role="textbox"
+    aria-label="Ask Meta AI anything"
+    data-placeholder="Ask Meta AI anything"
+  ></div>
+  <div id="response-area" data-testid="response">
+    Max Mustermann schrieb an max@test.de eine Nachricht.
+  </div>
+</body>
+</html>

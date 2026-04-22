@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>You.com – Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #ffffff; color: #1a1a1a; }
+    textarea {
+      width: 100%; min-height: 48px; padding: 12px; resize: none;
+      background: #f7f7f8; border: 1px solid #e5e5e7; border-radius: 16px;
+      color: #1a1a1a; font-size: 16px; outline: none; box-sizing: border-box;
+    }
+    #response-area { margin-top: 1rem; padding: 1rem; background: #fafafa; border: 1px solid #eee; border-radius: 8px; min-height: 80px; }
+  </style>
+</head>
+<body>
+  <h2>You.com Fixture</h2>
+  <textarea
+    placeholder="Ask anything..."
+    rows="2"
+    aria-label="Ask anything"
+    name="q"
+  ></textarea>
+  <div id="response-area" data-testid="response">
+    Max Mustermann schrieb an max@test.de eine Nachricht.
+  </div>
+</body>
+</html>

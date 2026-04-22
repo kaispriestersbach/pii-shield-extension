@@ -23,13 +23,20 @@ const PII_TEXT = 'Max Mustermann, max@test.de';
 const FAKE_RESPONSE = 'Thomas Weber schrieb an t.weber@example.com eine Nachricht.';
 
 const CHATBOTS = [
-  { name: 'chatgpt',    selector: '#prompt-textarea' },
-  { name: 'claude',     selector: '.ProseMirror' },
-  { name: 'gemini',     selector: '.ql-editor' },
-  { name: 'mistral',    selector: 'textarea' },
-  { name: 'copilot',    selector: 'textarea' },
-  { name: 'deepseek',   selector: 'textarea' },
-  { name: 'perplexity', selector: 'textarea' },
+  { name: 'chatgpt',     selector: '#prompt-textarea' },
+  { name: 'claude',      selector: '.ProseMirror' },
+  { name: 'gemini',      selector: '.ql-editor' },
+  { name: 'mistral',     selector: 'textarea' },
+  { name: 'copilot',     selector: 'textarea' },
+  { name: 'deepseek',    selector: 'textarea' },
+  { name: 'perplexity',  selector: 'textarea' },
+  { name: 'grok',        selector: 'textarea' },
+  { name: 'poe',         selector: 'textarea' },
+  { name: 'meta',        selector: '[contenteditable]' },
+  { name: 'huggingface', selector: 'textarea' },
+  { name: 'phind',       selector: 'textarea' },
+  { name: 'you',         selector: 'textarea' },
+  { name: 'qwen',        selector: 'textarea' },
 ] as const;
 
 async function syntheticPaste(page: Page, selector: string, text: string) {
