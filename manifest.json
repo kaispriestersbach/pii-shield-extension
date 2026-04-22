@@ -15,7 +15,8 @@
     "https://gemini.google.com/*",
     "https://chat.mistral.ai/*",
     "https://copilot.microsoft.com/*",
-    "https://chat.deepseek.com/*"
+    "https://chat.deepseek.com/*",
+    "https://www.perplexity.ai/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -30,7 +31,8 @@
         "https://gemini.google.com/*",
         "https://chat.mistral.ai/*",
         "https://copilot.microsoft.com/*",
-        "https://chat.deepseek.com/*"
+        "https://chat.deepseek.com/*",
+        "https://www.perplexity.ai/*"
       ],
       "js": ["content.js"],
       "css": ["styles/content.css"],
