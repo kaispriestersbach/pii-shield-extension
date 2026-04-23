@@ -3,7 +3,7 @@
 [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-1f6feb)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
 [![Chrome 138+](https://img.shields.io/badge/Chrome-138%2B-34a853)](manifest.json)
 [![Local first](https://img.shields.io/badge/Privacy-local--first-0f766e)](#privacy-and-security-model)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](LICENSE)
 
 Created and maintained by [Kai Spriestersbach](https://www.afaik.de)
 ([kai@afaik.de](mailto:kai@afaik.de)).
@@ -288,4 +288,8 @@ workflows, local-first browser tooling, and secure automation.
 
 ## License
 
-PII Shield is released under the [MIT License](LICENSE).
+PII Shield is released under the
+[Creative Commons Attribution-NonCommercial 4.0 International License
+(CC BY-NC 4.0)](LICENSE). You are free to share and adapt the work for
+non-commercial purposes, provided that you give appropriate credit to
+Kai Spriestersbach.
