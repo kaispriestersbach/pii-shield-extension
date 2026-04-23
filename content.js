@@ -1,35 +1,30 @@
 /**
  * PII Shield – Content Script
- * 
- * Intercepts paste events to anonymize PII before it reaches the AI chatbot.
- * Intercepts copy events to de-anonymize PII in chatbot responses.
- * Shows a visual notification banner when PII is detected and replaced.
+ *
+ * Reversible mode anonymizes with fake-but-plausible values and restores
+ * answers on copy. Simple mode masks with typed placeholders and never
+ * restores on copy.
  */
 
 (() => {
   'use strict';
 
-  // ─── State ──────────────────────────────────────────────────────────────────
-
   let isEnabled = true;
+  let currentMode = 'reversible';
+  let simpleModeModelState = null;
   let notificationTimeout = null;
-
-  // Serialized paste processor. Events are queued so a second Ctrl+V arriving
-  // during an ongoing analysis is handled in order instead of being dropped.
-  const pasteQueue = [];
-  let pasteWorkerRunning = false;
-  // Guards the copy interceptor from re-entering itself when we rewrite clipboard.
   let copyProcessing = false;
+  let pasteWorkerRunning = false;
+
+  const pasteQueue = [];
   const localMappings = new Map();
   let localMappingsTouchedAt = 0;
 
-  // Quick regex prefilter — when any of these match, we always scan the paste
-  // even if it's shorter than the default length threshold.
   const PII_QUICK_PATTERNS = [
-    /[\w.+-]+@[\w-]+\.[\w.-]+/,              // email
-    /(?:\+?\d[\s\-\/.()]*){7,}/,              // phone-ish (7+ digits with separators)
-    /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/,       // IBAN
-    /\b(?:\d[ -]?){13,19}\b/,                 // credit card
+    /[\w.+-]+@[\w-]+\.[\w.-]+/,
+    /(?:\+?\d[\s\-/.()]*){7,}/,
+    /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/,
+    /\b(?:\d[ -]?){13,19}\b/,
   ];
 
   const WORD_LIKE = /^[\p{L}\p{N}\s\-]+$/u;
@@ -41,33 +36,82 @@
     const trimmed = text.trim();
     if (trimmed.length === 0) return false;
     if (trimmed.length >= 10) return true;
-    return PII_QUICK_PATTERNS.some(re => re.test(trimmed));
+    return PII_QUICK_PATTERNS.some((re) => re.test(trimmed));
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   }
 
   function errorMessageFor(code) {
     switch (code) {
-      case 'ai_api_missing': return 'Die Chrome Prompt API ist in diesem Erweiterungskontext nicht verfügbar.';
-      case 'ai_unavailable': return 'Gemini Nano ist nicht verfügbar.';
-      case 'ai_status_failed': return 'Der Gemini-Nano-Status konnte nicht geprüft werden.';
+      case 'ai_api_missing': return 'Die Chrome Prompt API ist in diesem Erweiterungskontext nicht verfuegbar.';
+      case 'ai_unavailable': return 'Gemini Nano ist nicht verfuegbar.';
+      case 'ai_status_failed': return 'Der Gemini-Nano-Status konnte nicht geprueft werden.';
       case 'ai_session_failed': return 'Gemini Nano konnte nicht gestartet oder heruntergeladen werden.';
-      case 'parse_failed':   return 'Die KI-Antwort konnte nicht ausgewertet werden.';
+      case 'parse_failed': return 'Die KI-Antwort konnte nicht ausgewertet werden.';
       case 'timeout': return 'Die PII-Analyse hat zu lange gedauert.';
       case 'detection_failed': return 'Die PII-Analyse ist fehlgeschlagen.';
       default: return 'Unbekannter Fehler bei der PII-Analyse.';
     }
   }
 
-  // Load initial state
-  chrome.runtime.sendMessage({ type: 'GET_STATUS' }, (response) => {
-    if (response) isEnabled = response.enabled;
-  });
+  function manualDecisionMessageFor(code) {
+    switch (code) {
+      case 'simple_model_missing':
+        return 'Das lokale Privacy-Filter-Modell ist noch nicht bereitgestellt. Bitte fuehre zuerst den lokalen Stage-Schritt fuer den Simple Mode aus.';
+      case 'webgpu_unavailable':
+        return 'WebGPU ist in diesem Browserprofil nicht verfuegbar. Der Simple Mode kann den Text deshalb nicht lokal maskieren.';
+      case 'offscreen_unavailable':
+        return 'Die lokale Modelllaufzeit konnte nicht gestartet werden.';
+      case 'simple_model_init_failed':
+        return 'Das lokale Privacy-Filter-Modell konnte nicht geladen werden.';
+      case 'simple_analysis_failed':
+        return 'Der Simple Mode konnte den Text gerade nicht lokal pruefen.';
+      case 'simple_model_unavailable':
+        return 'Das lokale Privacy-Filter-Modell ist derzeit nicht bereit.';
+      default:
+        return 'Der Simple Mode konnte den Text gerade nicht lokal maskieren.';
+    }
+  }
 
-  // Listen for enable/disable changes
+  function badgeTitle() {
+    if (!isEnabled) return 'PII Shield inaktiv - Klicken zum Aktivieren';
+    return currentMode === 'simple'
+      ? 'PII Shield aktiv (Simple Mode) - Klicken zum Deaktivieren'
+      : 'PII Shield aktiv (Reversible Mode) - Klicken zum Deaktivieren';
+  }
+
+  function applyStatusResponse(response) {
+    if (!response) return;
+    if (typeof response.enabled === 'boolean') {
+      isEnabled = response.enabled;
+    }
+    if (response.mode === 'simple' || response.mode === 'reversible') {
+      currentMode = response.mode;
+      if (currentMode !== 'reversible') {
+        replaceLocalMappings({});
+      }
+    }
+    if (response.simpleModeModelState) {
+      simpleModeModelState = response.simpleModeModelState;
+    }
+    updateBadge();
+  }
+
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.piiShieldEnabled) {
       isEnabled = changes.piiShieldEnabled.newValue;
-      updateBadge();
     }
+    if (changes.piiShieldMode) {
+      currentMode = changes.piiShieldMode.newValue === 'simple' ? 'simple' : 'reversible';
+      if (currentMode !== 'reversible') {
+        replaceLocalMappings({});
+      }
+    }
+    updateBadge();
   });
 
   chrome.runtime.onMessage.addListener((message) => {
@@ -76,7 +120,7 @@
     }
   });
 
-  // ─── Notification Banner ──────────────────────────────────────────────────
+  // ─── Banner / Overlay UI ─────────────────────────────────────────────────
 
   function createNotificationBanner() {
     let banner = document.getElementById('pii-shield-banner');
@@ -92,47 +136,44 @@
   function showNotification(message, type = 'info') {
     const banner = createNotificationBanner();
 
-    const confidenceHint = type === 'anonymized'
-      ? '<span class="pii-shield-banner-hint">Lokal anonymisiert — Details nur im Extension-Popup.</span>'
-      : '';
+    let hint = '';
+    if (type === 'anonymized') {
+      hint = '<span class="pii-shield-banner-hint">Lokal anonymisiert - Ruecktausch bleibt nur in diesem Tab.</span>';
+    } else if (type === 'masked') {
+      hint = '<span class="pii-shield-banner-hint">Lokal maskiert - im Simple Mode gibt es keinen Ruecktausch.</span>';
+    }
 
-    const icon = type === 'anonymized' ? '🛡️' : type === 'deanonymized' ? '🔓' : 'ℹ️';
+    const icon = type === 'deanonymized'
+      ? '🔓'
+      : type === 'masked'
+        ? '🧼'
+        : type === 'anonymized'
+          ? '🛡️'
+          : 'ℹ️';
 
-    const html = `
+    banner.innerHTML = `
       <div class="pii-shield-banner-content">
-        <div class="pii-shield-banner-icon">
-          ${icon}
-        </div>
+        <div class="pii-shield-banner-icon">${icon}</div>
         <div class="pii-shield-banner-text">
           <strong>PII Shield</strong>
           <span>${escapeHtml(message)}</span>
-          ${confidenceHint}
+          ${hint}
         </div>
         <button class="pii-shield-banner-close" id="pii-shield-close">✕</button>
       </div>`;
-
-    banner.innerHTML = html;
     banner.className = `pii-shield-banner pii-shield-banner-${type} pii-shield-banner-visible`;
 
-    // Event listeners
-    const closeBtn = document.getElementById('pii-shield-close');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
+    const closeButton = document.getElementById('pii-shield-close');
+    if (closeButton) {
+      closeButton.addEventListener('click', () => {
         banner.className = 'pii-shield-banner';
       });
     }
 
-    // Auto-hide after 8 seconds
     if (notificationTimeout) clearTimeout(notificationTimeout);
     notificationTimeout = setTimeout(() => {
       banner.className = 'pii-shield-banner';
     }, 8000);
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   }
 
   function createPasteStatusIndicator() {
@@ -168,10 +209,9 @@
     const queuedBehindCurrent = pasteWorkerRunning ? pasteQueue.length : Math.max(pasteQueue.length - 1, 0);
     const detail = pasteWorkerRunning
       ? queuedBehindCurrent > 0
-        ? `Der aktuelle Text wird lokal geprüft. ${queuedBehindCurrent} weiterer Einfügevorgang wartet bereits.`
-        : 'Der Text wird lokal geprüft und danach automatisch eingefügt.'
-      : 'Die lokale Prüfung startet sofort.';
-
+        ? `Der aktuelle Text wird lokal geprueft. ${queuedBehindCurrent} weiterer Einfuegevorgang wartet bereits.`
+        : 'Der Text wird lokal geprueft und danach automatisch eingefuegt.'
+      : 'Die lokale Pruefung startet sofort.';
     const countBadge = totalPending > 1
       ? `<span class="pii-shield-paste-status-count">${totalPending}</span>`
       : '';
@@ -180,7 +220,7 @@
       <div class="pii-shield-paste-status-content">
         <span class="pii-shield-paste-status-spinner" aria-hidden="true"></span>
         <div class="pii-shield-paste-status-text">
-          <strong>PII Shield prüft das Einfügen…</strong>
+          <strong>PII Shield prueft das Einfuegen...</strong>
           <span>${escapeHtml(detail)}</span>
         </div>
         ${countBadge}
@@ -188,7 +228,55 @@
     indicator.className = 'pii-shield-paste-status pii-shield-paste-status-visible';
   }
 
-  // ─── Status Badge ─────────────────────────────────────────────────────────
+  function showManualDecisionDialog(reasonCode) {
+    return new Promise((resolve) => {
+      const existing = document.getElementById('pii-shield-decision-backdrop');
+      if (existing) existing.remove();
+
+      const backdrop = document.createElement('div');
+      backdrop.id = 'pii-shield-decision-backdrop';
+      backdrop.className = 'pii-shield-decision-backdrop';
+      backdrop.innerHTML = `
+        <div class="pii-shield-decision-card" role="dialog" aria-modal="true" aria-labelledby="pii-shield-decision-title">
+          <h2 id="pii-shield-decision-title">PII Shield konnte nicht lokal maskieren</h2>
+          <p>${escapeHtml(manualDecisionMessageFor(reasonCode))}</p>
+          <div class="pii-shield-decision-actions">
+            <button type="button" class="pii-shield-decision-btn pii-shield-decision-cancel" data-action="cancel">Abbrechen</button>
+            <button type="button" class="pii-shield-decision-btn pii-shield-decision-insert" data-action="insert">Unmaskiert einfuegen</button>
+          </div>
+        </div>`;
+
+      const finish = (decision) => {
+        document.removeEventListener('keydown', onKeyDown, true);
+        backdrop.remove();
+        resolve(decision);
+      };
+
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          finish('cancel');
+        }
+      };
+
+      backdrop.addEventListener('click', (event) => {
+        if (event.target === backdrop) {
+          finish('cancel');
+        }
+      });
+
+      backdrop.querySelectorAll('[data-action]').forEach((button) => {
+        button.addEventListener('click', () => {
+          finish(button.getAttribute('data-action'));
+        });
+      });
+
+      document.addEventListener('keydown', onKeyDown, true);
+      document.body.appendChild(backdrop);
+    });
+  }
+
+  // ─── Badge / Status ──────────────────────────────────────────────────────
 
   function updateBadge() {
     let badge = document.getElementById('pii-shield-badge');
@@ -196,27 +284,42 @@
       badge = document.createElement('div');
       badge.id = 'pii-shield-badge';
       badge.className = 'pii-shield-badge';
-      badge.title = 'PII Shield – Click to toggle';
       badge.textContent = '🛡️';
       badge.addEventListener('click', toggleEnabled);
       document.body.appendChild(badge);
     }
+
     badge.classList.toggle('pii-shield-badge-disabled', !isEnabled);
     badge.classList.toggle('pii-shield-badge-busy', pasteQueue.length + (pasteWorkerRunning ? 1 : 0) > 0);
-    badge.title = isEnabled ? 'PII Shield aktiv – Klicken zum Deaktivieren' : 'PII Shield inaktiv – Klicken zum Aktivieren';
+    badge.title = badgeTitle();
   }
 
-  function toggleEnabled() {
+  async function refreshStatus() {
+    try {
+      applyStatusResponse(await sendMessage({ type: 'GET_STATUS' }));
+    } catch (error) {
+      console.warn('[PII Shield] Could not refresh status:', error);
+      updateBadge();
+    }
+  }
+
+  async function toggleEnabled() {
     isEnabled = !isEnabled;
-    chrome.runtime.sendMessage({ type: 'SET_ENABLED', enabled: isEnabled });
     updateBadge();
+
+    try {
+      applyStatusResponse(await sendMessage({ type: 'SET_ENABLED', enabled: isEnabled }));
+    } catch (error) {
+      console.error('[PII Shield] Could not toggle enabled state:', error);
+    }
+
     showNotification(
       isEnabled ? 'PII Shield wurde aktiviert.' : 'PII Shield wurde deaktiviert.',
       'info'
     );
   }
 
-  // ─── Paste Interception (Anonymization) ───────────────────────────────────
+  // ─── Paste Flow ──────────────────────────────────────────────────────────
 
   document.addEventListener('paste', (event) => {
     if (!isEnabled) return;
@@ -227,8 +330,6 @@
     const text = clipboardData.getData('text/plain');
     if (!text || !shouldScanPaste(text)) return;
 
-    // Capture the paste target now — by the time the queue processes it the
-    // user may have focused elsewhere.
     const target = document.activeElement;
 
     event.preventDefault();
@@ -236,13 +337,15 @@
 
     pasteQueue.push({ text, target });
     updatePasteStatusIndicator();
-    runPasteWorker();
-  }, true); // Capture phase — intercept before the page's own handlers
+    void runPasteWorker();
+  }, true);
 
   async function runPasteWorker() {
     if (pasteWorkerRunning) return;
+
     pasteWorkerRunning = true;
     updatePasteStatusIndicator();
+
     try {
       while (pasteQueue.length > 0) {
         const { text, target } = pasteQueue.shift();
@@ -259,31 +362,61 @@
     try {
       const result = await sendMessage({ type: 'ANONYMIZE_TEXT', text });
 
-      if (result && result.error) {
-        showNotification(`Einfügen blockiert: ${errorMessageFor(result.error)}`, 'info');
-      } else if (result && result.hasPII) {
-        const replacements = result.replacements || {};
-        insertTextAtTarget(target, result.anonymizedText);
-        addReplacementsToLocalMappings(replacements);
-        showNotification(
-          `${Object.keys(replacements).length} PII-Element(e) erkannt und anonymisiert.`,
-          'anonymized'
-        );
-      } else if (result) {
-        insertTextAtTarget(target, text);
-      } else {
-        showNotification('Einfügen blockiert: Keine Antwort vom Service Worker.', 'info');
+      if (result?.requiresManualDecision) {
+        const decision = await showManualDecisionDialog(result.manualDecisionReason);
+        if (decision === 'insert') {
+          insertTextAtTarget(target, text);
+          showNotification('Originaltext wurde auf ausdruecklichen Wunsch unmaskiert eingefuegt.', 'info');
+        } else {
+          showNotification('Einfuegen abgebrochen.', 'info');
+        }
+        return;
       }
-    } catch (err) {
-      console.error('[PII Shield] Error processing paste:', err);
-      showNotification('Einfügen blockiert: Service Worker nicht erreichbar.', 'info');
+
+      if (result?.error) {
+        showNotification(`Einfuegen blockiert: ${errorMessageFor(result.error)}`, 'info');
+        return;
+      }
+
+      if (result?.hasPII) {
+        const outputText = result.outputText || result.anonymizedText || text;
+        insertTextAtTarget(target, outputText);
+
+        if (result.mode === 'reversible') {
+          addReplacementsToLocalMappings(result.replacements || {});
+        } else {
+          replaceLocalMappings({});
+        }
+
+        const count = result.displaySummary?.count
+          ?? Object.keys(result.replacements || {}).length
+          ?? 0;
+        const transformed = result.transformType === 'masked' ? 'maskiert' : 'anonymisiert';
+
+        showNotification(
+          `${count} PII-Element(e) erkannt und ${transformed}.`,
+          result.transformType === 'masked' ? 'masked' : 'anonymized'
+        );
+        return;
+      }
+
+      if (result) {
+        insertTextAtTarget(target, text);
+        return;
+      }
+
+      showNotification('Einfuegen blockiert: Keine Antwort vom Service Worker.', 'info');
+    } catch (error) {
+      console.error('[PII Shield] Error processing paste:', error);
+      showNotification('Einfuegen blockiert: Service Worker nicht erreichbar.', 'info');
     }
   }
 
-  // ─── Copy Interception (De-Anonymization) ─────────────────────────────────
+  // ─── Copy Flow ───────────────────────────────────────────────────────────
 
   document.addEventListener('copy', (event) => {
-    if (!isEnabled || copyProcessing) return;
+    if (!isEnabled || copyProcessing || currentMode !== 'reversible') return;
+
     pruneLocalMappingsIfExpired();
     if (!event.clipboardData || localMappings.size === 0) return;
 
@@ -302,20 +435,16 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         event.clipboardData.setData('text/plain', deanonymizedText);
-
-        showNotification(
-          'Anonymisierte Daten in der Antwort wurden wiederhergestellt.',
-          'deanonymized'
-        );
+        showNotification('Anonymisierte Daten in der Antwort wurden wiederhergestellt.', 'deanonymized');
       }
-    } catch (err) {
-      console.error('[PII Shield] Error processing copy:', err);
+    } catch (error) {
+      console.error('[PII Shield] Error processing copy:', error);
     } finally {
       copyProcessing = false;
     }
   }, true);
 
-  // ─── Local Mapping Mirror (Synchronous Copy Path) ─────────────────────────
+  // ─── Local Mapping Mirror ────────────────────────────────────────────────
 
   function replaceLocalMappings(mappings) {
     localMappings.clear();
@@ -346,12 +475,17 @@
   }
 
   async function refreshLocalMappings() {
+    if (currentMode !== 'reversible') {
+      replaceLocalMappings({});
+      return;
+    }
+
     try {
       const response = await sendMessage({ type: 'GET_MAPPINGS' });
       replaceLocalMappings(response?.mappings || {});
-    } catch (err) {
-      console.warn('[PII Shield] Could not refresh local mappings:', err);
-      localMappings.clear();
+    } catch (error) {
+      console.warn('[PII Shield] Could not refresh local mappings:', error);
+      replaceLocalMappings({});
     }
   }
 
@@ -361,6 +495,7 @@
 
   function buildLocalReplacementEntries(map) {
     const entries = [];
+
     for (const [from, to] of map) {
       if (!from || !to) continue;
       entries.push({ from, to });
@@ -368,14 +503,17 @@
       const fromParts = from.split(/\s+/);
       const toParts = to.split(/\s+/);
       if (fromParts.length === toParts.length && fromParts.length >= 2) {
-        for (let i = 0; i < fromParts.length; i++) {
-          if (fromParts[i].length >= 3 && toParts[i].length >= 2 &&
-              NAME_PART.test(fromParts[i]) && NAME_PART.test(toParts[i])) {
-            entries.push({ from: fromParts[i], to: toParts[i] });
+        for (let index = 0; index < fromParts.length; index++) {
+          if (fromParts[index].length >= 3
+            && toParts[index].length >= 2
+            && NAME_PART.test(fromParts[index])
+            && NAME_PART.test(toParts[index])) {
+            entries.push({ from: fromParts[index], to: toParts[index] });
           }
         }
       }
     }
+
     entries.sort((a, b) => b.from.length - a.from.length);
     return entries;
   }
@@ -383,10 +521,12 @@
   function applyLocalReplacements(text, entries) {
     const spans = findLocalReplacementSpans(text, entries);
     let result = text;
-    for (let i = spans.length - 1; i >= 0; i--) {
-      const span = spans[i];
+
+    for (let index = spans.length - 1; index >= 0; index--) {
+      const span = spans[index];
       result = result.slice(0, span.start) + span.replacement + result.slice(span.end);
     }
+
     return result;
   }
 
@@ -402,6 +542,7 @@
           `(?<=^|[^\\p{L}\\p{N}_])${escaped}(\\p{L}{0,2})(?=$|[^\\p{L}\\p{N}_])`,
           'gu'
         );
+
         for (const match of text.matchAll(re)) {
           candidates.push({
             start: match.index,
@@ -443,20 +584,18 @@
     return selected;
   }
 
-  // ─── Helper: Insert Text at Cursor ────────────────────────────────────────
+  // ─── Editor Integration ─────────────────────────────────────────────────
 
   function insertTextAtTarget(preferredTarget, text) {
-    // Prefer the element that was focused when the paste event fired, but fall
-    // back to the currently focused element if the target is gone (e.g., user
-    // navigated away during the 1–5s analysis).
     let activeElement = preferredTarget && document.contains(preferredTarget)
       ? preferredTarget
       : document.activeElement;
 
     if (!activeElement) activeElement = findEditableElement();
     if (!activeElement) return;
+
     if (activeElement !== document.activeElement) {
-      try { activeElement.focus(); } catch (_) {}
+      try { activeElement.focus(); } catch {}
     }
 
     if (activeElement.isContentEditable || activeElement.getAttribute('contenteditable') === 'true') {
@@ -470,19 +609,16 @@
     }
 
     const editableEl = findEditableElement();
-    if (editableEl) {
-      try { editableEl.focus(); } catch (_) {}
-      if (editableEl.tagName === 'TEXTAREA' || editableEl.tagName === 'INPUT') {
-        insertIntoInput(editableEl, text);
-      } else {
-        insertIntoContentEditable(editableEl, text);
-      }
+    if (!editableEl) return;
+
+    try { editableEl.focus(); } catch {}
+    if (editableEl.tagName === 'TEXTAREA' || editableEl.tagName === 'INPUT') {
+      insertIntoInput(editableEl, text);
+    } else {
+      insertIntoContentEditable(editableEl, text);
     }
   }
 
-  // Insert into a plain <input> or <textarea>. Uses the native value setter so
-  // frameworks like React (which cache the descriptor) still see the change,
-  // then fires an InputEvent with inputType so beforeinput-aware editors react.
   function insertIntoInput(el, text) {
     const proto = el.tagName === 'TEXTAREA'
       ? HTMLTextAreaElement.prototype
@@ -498,8 +634,9 @@
     } else {
       el.value = next;
     }
+
     const caret = start + text.length;
-    try { el.setSelectionRange(caret, caret); } catch (_) {}
+    try { el.setSelectionRange(caret, caret); } catch {}
 
     try {
       el.dispatchEvent(new InputEvent('input', {
@@ -507,30 +644,27 @@
         inputType: 'insertFromPaste',
         data: text,
       }));
-    } catch (_) {
+    } catch {
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  // Insert into a contenteditable host. We first give the framework a chance to
-  // handle a synthetic beforeinput (ProseMirror/Lexical hook into it); if the
-  // event is not canceled we fall back to execCommand, which Chromium still
-  // supports and which correctly integrates with undo history.
   function insertIntoContentEditable(el, text) {
     let handled = false;
+
     try {
-      const dt = new DataTransfer();
-      dt.setData('text/plain', text);
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData('text/plain', text);
       const beforeInput = new InputEvent('beforeinput', {
         bubbles: true,
         cancelable: true,
         inputType: 'insertFromPaste',
         data: text,
-        dataTransfer: dt,
+        dataTransfer,
       });
       handled = !el.dispatchEvent(beforeInput);
-    } catch (_) { /* older browsers */ }
+    } catch {}
 
     if (!handled) {
       // eslint-disable-next-line deprecation/deprecation
@@ -540,25 +674,24 @@
   }
 
   function findEditableElement() {
-    // Common selectors for AI chatbot input fields
     const selectors = [
       '[contenteditable="true"]',
       'textarea',
-      '#prompt-textarea',                         // ChatGPT
-      '.ProseMirror',                              // Claude
-      'div[data-placeholder]',                     // Various
-      'rich-textarea',                             // Gemini
-      '.ql-editor',                                // Quill-based editors
+      '#prompt-textarea',
+      '.ProseMirror',
+      'div[data-placeholder]',
+      'rich-textarea',
+      '.ql-editor',
     ];
 
     for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (el) return el;
+      const element = document.querySelector(selector);
+      if (element) return element;
     }
     return null;
   }
 
-  // ─── Helper: Promise-based message sending ────────────────────────────────
+  // ─── Messaging / Init ───────────────────────────────────────────────────
 
   function sendMessage(message) {
     return new Promise((resolve, reject) => {
@@ -572,17 +705,20 @@
     });
   }
 
-  // ─── Initialize ───────────────────────────────────────────────────────────
+  async function initialize() {
+    updateBadge();
+    await Promise.allSettled([
+      refreshStatus(),
+      refreshLocalMappings(),
+    ]);
+  }
 
-  // Wait for DOM to be ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      updateBadge();
-      refreshLocalMappings();
+      void initialize();
     });
   } else {
-    updateBadge();
-    refreshLocalMappings();
+    void initialize();
   }
 
   setInterval(pruneLocalMappingsIfExpired, 60 * 1000);

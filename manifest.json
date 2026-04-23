@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "PII Shield – AI Privacy Guard",
-  "version": "1.0.0",
-  "description": "Automatically detects and anonymizes personally identifiable information (PII) before pasting into AI chatbots. Reverses anonymization when copying responses. Powered by Chrome Built-in AI (Gemini Nano).",
+  "version": "1.1.0",
+  "description": "Automatically detects, anonymizes or masks personally identifiable information (PII) before pasting into AI chatbots. Supports reversible Gemini Nano mode and local Privacy Filter simple mode.",
   "permissions": [
-    "storage"
+    "storage",
+    "offscreen"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",
@@ -63,6 +64,9 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "minimum_chrome_version": "138"
 }

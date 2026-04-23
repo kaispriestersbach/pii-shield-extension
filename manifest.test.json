@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PII Shield – TEST BUILD",
-  "version": "0.0.0-test",
+  "version": "0.0.1",
   "description": "Test build with broad permissions for Playwright integration tests.",
   "permissions": [
     "storage"

@@ -8,7 +8,6 @@
 </head>
 <body>
   <div class="popup-container">
-    <!-- Header -->
     <header class="popup-header">
       <div class="popup-logo">
         <span class="popup-logo-icon">🛡️</span>
@@ -23,20 +22,32 @@
       </label>
     </header>
 
-    <!-- Status -->
     <div class="popup-status" id="status-section">
       <div class="popup-status-indicator" id="status-indicator">
         <span class="popup-status-dot"></span>
         <span class="popup-status-text" id="status-text">Aktiv</span>
       </div>
-      <div class="popup-status-site" id="status-site"></div>
+      <div class="popup-status-meta">
+        <div class="popup-status-site" id="status-site"></div>
+        <div class="popup-status-mode" id="status-mode">Reversible Mode</div>
+      </div>
     </div>
 
-    <!-- AI Status -->
+    <div class="popup-section popup-mode-section">
+      <h2>Modus</h2>
+      <div class="popup-mode-switch" id="mode-switch">
+        <button class="popup-mode-btn" id="mode-reversible" data-mode="reversible" type="button">Reversible</button>
+        <button class="popup-mode-btn" id="mode-simple" data-mode="simple" type="button">Simple</button>
+      </div>
+      <div class="popup-mode-hint" id="mode-hint">
+        Reversible ersetzt beim Einfügen durch Fake-Daten und stellt beim Kopieren bekannte Werte wieder her.
+      </div>
+    </div>
+
     <div class="popup-ai-status" id="ai-status-section">
       <div class="popup-ai-status-icon" id="ai-status-icon">⏳</div>
       <div class="popup-ai-status-text">
-        <span class="popup-ai-status-label">Gemini Nano</span>
+        <span class="popup-ai-status-label">Gemini Nano (Reversible)</span>
         <span class="popup-ai-status-value" id="ai-status-value">Wird geprüft…</span>
       </div>
       <button class="popup-ai-status-action" id="btn-ai-download" hidden title="Gemini Nano herunterladen">
@@ -44,16 +55,26 @@
       </button>
     </div>
 
-    <!-- Reliability Warning -->
+    <div class="popup-ai-status" id="simple-status-section">
+      <div class="popup-ai-status-icon" id="simple-status-icon">📦</div>
+      <div class="popup-ai-status-text">
+        <span class="popup-ai-status-label">Privacy Filter (Simple)</span>
+        <span class="popup-ai-status-value" id="simple-status-value">Prüfung im Service Worker…</span>
+        <span class="popup-ai-status-detail" id="simple-status-detail">Lokal im Browser, ohne externe Dienste.</span>
+      </div>
+      <button class="popup-ai-status-action" id="btn-simple-load" hidden title="Lokales Privacy-Filter-Modell laden">
+        Lokal laden
+      </button>
+    </div>
+
     <div class="popup-warning">
       <span class="popup-warning-icon">⚠️</span>
       <div class="popup-warning-text">
-        <strong>KI-basierte Erkennung ist nicht deterministisch.</strong>
-        Nicht als alleiniger Schutz für regulierte oder hochsensible Daten verwenden. Bitte anonymisierte Eingaben stichprobenartig prüfen.
+        <strong>Lokaler Schutz, aber kein Freifahrtschein.</strong>
+        PII Shield reduziert Risiken, ersetzt aber keine manuelle Sichtprüfung bei sensiblen oder regulierten Daten.
       </div>
     </div>
 
-    <!-- Current Mappings -->
     <div class="popup-section" id="mappings-section">
       <div class="popup-section-header">
         <h2>Aktive Ersetzungen</h2>
@@ -70,6 +91,9 @@
         <div class="popup-empty" id="mappings-empty">
           Keine aktiven Ersetzungen für diesen Tab.
         </div>
+        <div class="popup-empty" id="mappings-static-hint" style="display:none;">
+          Im Simple Mode gibt es keine Rückzuordnung und keine tab-lokalen Fake/Original-Mappings.
+        </div>
         <table class="popup-table" id="mappings-table" style="display:none;">
           <thead>
             <tr>
@@ -82,26 +106,29 @@
       </div>
     </div>
 
-    <!-- Info -->
     <div class="popup-section popup-info-section">
-      <h2>So funktioniert es</h2>
-      <div class="popup-info-steps">
-        <div class="popup-info-step">
-          <span class="popup-info-step-num">1</span>
-          <span>Beim <strong>Einfügen</strong> (Ctrl+V) werden PII erkannt und durch Fake-Daten ersetzt.</span>
-        </div>
-        <div class="popup-info-step">
-          <span class="popup-info-step-num">2</span>
-          <span>Der Chatbot arbeitet mit den <strong>anonymisierten</strong> Daten.</span>
-        </div>
-        <div class="popup-info-step">
-          <span class="popup-info-step-num">3</span>
-          <span>Beim <strong>Kopieren</strong> der Antwort werden die Originaldaten automatisch wiederhergestellt.</span>
-        </div>
+      <h2>Aktiver Ablauf</h2>
+      <div class="popup-mode-summary" id="mode-summary">
+        Beim Einfügen werden erkannte PII durch plausible Fake-Daten ersetzt. Beim Kopieren aus dem Chat wird auf Basis lokaler Tab-Mappings zurückgetauscht.
       </div>
     </div>
 
-    <!-- Supported Sites -->
+    <div class="popup-section">
+      <h2>Lokales Staging</h2>
+      <div class="popup-info-step popup-install-step">
+        <span class="popup-info-step-num">1</span>
+        <span>Bundle das Offscreen-Runtime-Skript mit <strong>`npm run build`</strong>.</span>
+      </div>
+      <div class="popup-info-step popup-install-step">
+        <span class="popup-info-step-num">2</span>
+        <span>Stelle das Privacy-Filter-Modell lokal mit <strong>`npm run stage:model -- /pfad/zum/privacy-filter`</strong> bereit.</span>
+      </div>
+      <div class="popup-info-step popup-install-step">
+        <span class="popup-info-step-num">3</span>
+        <span>Lade danach die entpackte Extension neu, damit der Simple Mode das lokale Modell findet.</span>
+      </div>
+    </div>
+
     <div class="popup-section">
       <h2>Unterstützte Seiten</h2>
       <div class="popup-sites">
@@ -114,10 +141,9 @@
       </div>
     </div>
 
-    <!-- Footer -->
     <footer class="popup-footer">
-      <span>Powered by Chrome Built-in AI (Gemini Nano)</span>
-      <span>v1.0.0</span>
+      <span>Kai Spriestersbach · PII Shield</span>
+      <span id="footer-version">v1.0.0</span>
     </footer>
   </div>
 

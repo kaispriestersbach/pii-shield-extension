@@ -111,9 +111,8 @@ for (const bot of CHATBOTS) {
         .toContain(SAFE_TEXT.slice(0, 20));
       await expect(pasteStatus).not.toHaveClass(/pii-shield-paste-status-visible/, { timeout: 5_000 });
 
-      // Kein Banner
-      const banner = page.locator('#pii-shield-banner');
-      await expect(banner).not.toHaveClass(/pii-shield-banner-visible/);
+      // Kein Banner-Element wird erzeugt
+      await expect(page.locator('#pii-shield-banner')).toHaveCount(0);
 
       await page.close();
     });

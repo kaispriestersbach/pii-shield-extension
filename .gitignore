@@ -2,3 +2,6 @@ node_modules/
 test-build/
 playwright-report/
 test-results/
+offscreen/vendor/
+models/openai/privacy-filter/*
+!models/openai/privacy-filter/.gitkeep

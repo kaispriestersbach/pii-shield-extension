@@ -1,8 +1,30 @@
 # PII Shield – AI Privacy Guard
 
+**Autor der Software: Kai Spriestersbach**
+
 **Chrome Extension zum automatischen Schutz personenbezogener Daten (PII) bei der Nutzung von KI-Chatbots.**
 
-PII Shield erkennt personenbezogene Daten in der Zwischenablage, bevor sie in einen KI-Chatbot eingefügt werden, und ersetzt sie automatisch durch realistische, aber fiktive Alternativen. Beim Kopieren der Chatbot-Antwort werden bekannte Fake-Daten wiederhergestellt. Die Verarbeitung findet lokal im Browser statt – mit Chrome Built-in AI (Gemini Nano) und deterministischen Prüfern für strukturierte Daten.
+PII Shield erkennt personenbezogene Daten in der Zwischenablage, bevor sie in einen KI-Chatbot eingefügt werden. Die Verarbeitung findet lokal im Browser statt und bietet jetzt zwei Betriebsarten:
+
+- **Reversible Mode:** ersetzt PII durch realistische, aber fiktive Alternativen und stellt bekannte Fake-Daten beim Kopieren wieder her.
+- **Simple Mode:** maskiert erkannte PII mit typisierten Platzhaltern wie `<PRIVATE_EMAIL>` oder `<PRIVATE_PERSON>` auf Basis des lokalen OpenAI Privacy Filter Modells. Es gibt in diesem Modus keinen Rücktausch beim Kopieren.
+
+Die Erkennung bleibt vollständig lokal im Browser – mit Chrome Built-in AI (Gemini Nano), lokalem OpenAI Privacy Filter und deterministischen Prüfern für strukturierte Daten.
+
+---
+
+## Autorenhinweis
+
+PII Shield wird in dieser Codebasis von **Kai Spriestersbach** als Autor der Software geführt.
+
+---
+
+## Betriebsmodi
+
+| Modus | Verhalten beim Einfügen | Verhalten beim Kopieren | Lokale Laufzeit |
+|------|--------------------------|-------------------------|-----------------|
+| **Reversible** | Fake-Daten statt Original-PII | Bekannte Fake-Daten werden lokal zurückgetauscht | Gemini Nano + deterministische Prüfer |
+| **Simple** | Typisierte Platzhalter statt Original-PII | Kein Rücktausch | OpenAI Privacy Filter + deterministische Prüfer |
 
 ---
 
@@ -94,6 +116,14 @@ PII Shield benötigt Chrome 138 oder neuer mit aktiviertem Gemini Nano. Die folg
 3. Starte Chrome neu.
 4. Öffne `chrome://components/` und prüfe, ob **Optimization Guide On Device Model** vorhanden ist. Klicke ggf. auf **Nach Updates suchen**, um das Modell herunterzuladen.
 
+### Zusatzschritte für den Simple Mode
+
+Der Simple Mode benötigt zusätzlich das lokal gestagte OpenAI Privacy Filter Modell:
+
+1. Bundle die Offscreen-Runtime mit `npm run build`.
+2. Stage das Modell lokal mit `npm run stage:model -- /pfad/zum/privacy-filter`.
+3. Lade die entpackte Extension in Chrome anschließend neu.
+
 ### Hardware-Anforderungen
 
 | Anforderung | Minimum |
@@ -115,7 +145,7 @@ PII Shield benötigt Chrome 138 oder neuer mit aktiviertem Gemini Nano. Die folg
 
 ## Architektur
 
-PII Shield besteht aus drei Hauptkomponenten:
+PII Shield besteht aus vier Hauptkomponenten:
 
 ### 1. Content Script (`content.js`)
 
@@ -129,13 +159,17 @@ Zusätzlich zeigt das Content Script datensparsame Benachrichtigungen (Banner) a
 
 ### 2. Service Worker (`background.js`)
 
-Der Service Worker ist das Herzstück der PII-Erkennung. Er verwaltet eine Gemini Nano Session über die Chrome Prompt API (`LanguageModel.create()`) und nutzt strukturierte Prompt-Ausgaben per JSON Schema (`responseConstraint`), damit PII-Entities validierbar zurückkommen. Zusätzlich laufen deterministische Fallback-Detektoren für strukturierte PII.
+Der Service Worker ist das Herzstück der PII-Erkennung. Er orchestriert sowohl den reversiblen Gemini-Nano-Flow über die Chrome Prompt API (`LanguageModel.create()`) als auch den Simple Mode mit lokalem OpenAI Privacy Filter. Zusätzlich laufen deterministische Fallback-Detektoren für strukturierte PII.
 
 Das Mapping wird pro Tab gespeichert (`Map<tabId, Map<fake, original>>`), sodass mehrere Tabs unabhängig voneinander arbeiten können. Die Werte liegen in `chrome.storage.session`, werden bei Tab-Schließung, Navigation, explizitem Löschen und nach Inaktivität bereinigt und nicht in `chrome.storage.local` persistiert.
 
-### 3. Popup (`popup/`)
+### 3. Offscreen Runtime (`offscreen/`)
 
-Das Popup bietet eine Übersicht über den aktuellen Status der Extension, die Verfügbarkeit von Gemini Nano und die aktiven Ersetzungen für den aktuellen Tab. Über einen Toggle kann die Extension aktiviert oder deaktiviert werden. Die Mapping-Tabelle aktualisiert sich automatisch alle 2 Sekunden.
+Die Offscreen-Runtime hält das lokale OpenAI Privacy Filter Modell für den Simple Mode am Leben. Das Modell wird über Transformers.js + WebGPU geladen und ausschließlich aus lokal gestagten Modelldateien bedient. Remote-Modellzugriffe sind deaktiviert.
+
+### 4. Popup (`popup/`)
+
+Das Popup bietet eine Übersicht über den aktuellen Status der Extension, den aktiven Modus, die Verfügbarkeit von Gemini Nano, den Status des lokalen Privacy Filter Modells und die aktiven Ersetzungen für den aktuellen Tab. Über einen Toggle kann die Extension aktiviert oder deaktiviert werden. Im Simple Mode wird statt der Mapping-Tabelle ein Hinweis angezeigt, dass es keine Rückzuordnung gibt.
 
 ### Datenfluss-Diagramm
 

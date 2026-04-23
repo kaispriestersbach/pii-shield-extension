@@ -1,65 +1,75 @@
 /**
  * PII Shield – Popup Script
- * 
- * Manages the popup UI: toggle, status display, mapping viewer.
+ *
+ * Manages enable/disable, mode switching, model status cards and mappings.
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
   const toggleEnabled = document.getElementById('toggle-enabled');
+  const statusSection = document.getElementById('status-section');
   const statusIndicator = document.getElementById('status-indicator');
   const statusText = document.getElementById('status-text');
   const statusSite = document.getElementById('status-site');
-  const statusSection = document.getElementById('status-section');
+  const statusMode = document.getElementById('status-mode');
+  const modeHint = document.getElementById('mode-hint');
+  const modeSummary = document.getElementById('mode-summary');
+  const footerVersion = document.getElementById('footer-version');
+
+  const modeButtons = {
+    reversible: document.getElementById('mode-reversible'),
+    simple: document.getElementById('mode-simple'),
+  };
+
   const aiStatusIcon = document.getElementById('ai-status-icon');
   const aiStatusValue = document.getElementById('ai-status-value');
   const aiStatusSection = document.getElementById('ai-status-section');
+  const btnAIDownload = document.getElementById('btn-ai-download');
+
+  const simpleStatusIcon = document.getElementById('simple-status-icon');
+  const simpleStatusValue = document.getElementById('simple-status-value');
+  const simpleStatusDetail = document.getElementById('simple-status-detail');
+  const simpleStatusSection = document.getElementById('simple-status-section');
+  const btnSimpleLoad = document.getElementById('btn-simple-load');
+
   const mappingsEmpty = document.getElementById('mappings-empty');
+  const mappingsStaticHint = document.getElementById('mappings-static-hint');
   const mappingsTable = document.getElementById('mappings-table');
   const mappingsTbody = document.getElementById('mappings-tbody');
   const btnClear = document.getElementById('btn-clear');
   const btnClearAll = document.getElementById('btn-clear-all');
-  const btnAIDownload = document.getElementById('btn-ai-download');
-
-  let aiStatusPoll = null;
-
-  // ─── Get current tab info ───────────────────────────────────────────────
 
   let currentTabId = null;
-  let currentTabUrl = '';
+  let currentMode = 'reversible';
+  let aiStatusPoll = null;
+  let simpleStatusPoll = null;
+
+  footerVersion.textContent = `v${chrome.runtime.getManifest().version}`;
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
       currentTabId = String(tab.id);
-      currentTabUrl = tab.url || '';
-      const hostname = new URL(currentTabUrl).hostname;
-      statusSite.textContent = hostname;
+      statusSite.textContent = new URL(tab.url || '').hostname;
     }
-  } catch (e) {
+  } catch {
     statusSite.textContent = 'Unbekannt';
   }
 
-  // ─── Load enabled state ─────────────────────────────────────────────────
-
-  chrome.runtime.sendMessage({ type: 'GET_STATUS' }, (response) => {
-    if (response) {
-      const enabled = response.enabled;
-      toggleEnabled.checked = enabled;
-      updateStatusUI(enabled);
-    }
-  });
-
-  // ─── Toggle handler ─────────────────────────────────────────────────────
-
-  toggleEnabled.addEventListener('change', () => {
-    const enabled = toggleEnabled.checked;
-    chrome.runtime.sendMessage({ type: 'SET_ENABLED', enabled }, () => {
-      updateStatusUI(enabled);
-      if (enabled) ensureAIReady();
+  function sendRuntimeMessage(message) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(response || {});
+      });
     });
-  });
+  }
 
-  function updateStatusUI(enabled) {
+  function updateEnabledUI(enabled) {
+    toggleEnabled.checked = enabled;
+
     if (enabled) {
       statusSection.classList.remove('disabled');
       statusText.textContent = 'Aktiv';
@@ -73,56 +83,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // ─── Check AI availability ──────────────────────────────────────────────
+  function updateModeUI(mode) {
+    currentMode = mode === 'simple' ? 'simple' : 'reversible';
 
-  function sendRuntimeMessage(message) {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage(message, (response) => {
-        if (chrome.runtime.lastError) {
-          resolve({
-            availability: 'unavailable',
-            phase: 'error',
-            ready: false,
-            errorCode: 'service_worker_error',
-            errorMessage: chrome.runtime.lastError.message,
-          });
-          return;
-        }
-        resolve(response);
-      });
+    Object.entries(modeButtons).forEach(([key, button]) => {
+      button.classList.toggle('popup-mode-btn-active', key === currentMode);
     });
-  }
 
-  async function checkAIStatus() {
-    aiStatusIcon.textContent = 'ℹ️';
-    aiStatusValue.textContent = 'Prüfung im Service Worker…';
-    aiStatusSection.className = 'popup-ai-status';
-    updateAIStatusUI(await sendRuntimeMessage({ type: 'GET_AI_STATUS' }));
-  }
-
-  async function ensureAIReady() {
-    btnAIDownload.hidden = false;
-    btnAIDownload.disabled = true;
-    btnAIDownload.textContent = 'Lädt…';
-    updateAIStatusUI(await sendRuntimeMessage({ type: 'ENSURE_AI_READY' }));
-    startAIStatusPolling();
-  }
-
-  function startAIStatusPolling() {
-    if (aiStatusPoll) clearInterval(aiStatusPoll);
-    aiStatusPoll = setInterval(async () => {
-      const status = await sendRuntimeMessage({ type: 'GET_AI_STATUS' });
-      updateAIStatusUI(status);
-      if (status?.ready || status?.phase === 'unavailable' || status?.phase === 'error') {
-        clearInterval(aiStatusPoll);
-        aiStatusPoll = null;
-      }
-    }, 1000);
-  }
-
-  function formatProgress(progress) {
-    if (typeof progress !== 'number') return '';
-    return ` (${Math.round(progress * 100)}%)`;
+    if (currentMode === 'simple') {
+      statusMode.textContent = 'Simple Mode';
+      modeHint.textContent = 'Simple maskiert erkannte PII mit typisierten Platzhaltern und fuehrt keine Rueck-Deanonymisierung aus.';
+      modeSummary.textContent = 'Beim Einfuegen werden erkannte PII lokal mit typisierten Platzhaltern wie <PRIVATE_EMAIL> oder <PRIVATE_PERSON> maskiert. Beim Kopieren greift kein Ruecktausch.';
+      mappingsStaticHint.style.display = 'block';
+      btnClear.disabled = true;
+      btnClearAll.disabled = true;
+    } else {
+      statusMode.textContent = 'Reversible Mode';
+      modeHint.textContent = 'Reversible ersetzt beim Einfuegen durch Fake-Daten und stellt beim Kopieren bekannte Werte aus lokalen Tab-Mappings wieder her.';
+      modeSummary.textContent = 'Beim Einfuegen werden erkannte PII durch plausible Fake-Daten ersetzt. Beim Kopieren aus dem Chat wird auf Basis lokaler Tab-Mappings zurueckgetauscht.';
+      mappingsStaticHint.style.display = 'none';
+      btnClear.disabled = false;
+      btnClearAll.disabled = false;
+    }
   }
 
   function updateAIStatusUI(status) {
@@ -158,7 +140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         break;
       case 'downloading':
         aiStatusIcon.textContent = '⬇️';
-        aiStatusValue.textContent = `Modell wird heruntergeladen…${formatProgress(progress)}`;
+        aiStatusValue.textContent = `Modell wird heruntergeladen…${typeof progress === 'number' ? ` (${Math.round(progress * 100)}%)` : ''}`;
         aiStatusSection.className = 'popup-ai-status';
         btnAIDownload.hidden = false;
         btnAIDownload.disabled = true;
@@ -186,33 +168,105 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  btnAIDownload.addEventListener('click', ensureAIReady);
+  function updateSimpleStatusUI(status) {
+    simpleStatusSection.className = 'popup-ai-status';
+    btnSimpleLoad.hidden = true;
+    btnSimpleLoad.disabled = false;
+    btnSimpleLoad.textContent = 'Lokal laden';
 
-  checkAIStatus();
-
-  // ─── Load mappings ──────────────────────────────────────────────────────
-
-  function loadMappings() {
-    if (!currentTabId) {
-      showEmptyMappings();
+    if (!status?.staged) {
+      simpleStatusIcon.textContent = '📦';
+      simpleStatusValue.textContent = 'Modell nicht gestaged';
+      simpleStatusDetail.textContent = 'Führe lokal `npm run stage:model -- /pfad/zum/privacy-filter` aus und lade die Extension neu.';
+      simpleStatusSection.classList.add('unavailable');
       return;
     }
 
-    chrome.runtime.sendMessage(
-      { type: 'GET_MAPPINGS', tabId: currentTabId },
-      (response) => {
-        if (response && response.mappings && Object.keys(response.mappings).length > 0) {
-          showMappings(response.mappings);
-        } else {
-          showEmptyMappings();
-        }
+    if (status.loading) {
+      simpleStatusIcon.textContent = '⏳';
+      simpleStatusValue.textContent = 'Lokales Modell wird geladen…';
+      simpleStatusDetail.textContent = 'Die Offscreen-Laufzeit initialisiert Privacy Filter ueber WebGPU.';
+      btnSimpleLoad.hidden = false;
+      btnSimpleLoad.disabled = true;
+      btnSimpleLoad.textContent = 'Lädt…';
+      return;
+    }
+
+    if (status.ready) {
+      simpleStatusIcon.textContent = '✅';
+      simpleStatusValue.textContent = 'Bereit';
+      simpleStatusDetail.textContent = 'Privacy Filter läuft lokal im Browser über WebGPU.';
+      simpleStatusSection.classList.add('available');
+      return;
+    }
+
+    if (status.lastError) {
+      simpleStatusIcon.textContent = '❌';
+      simpleStatusValue.textContent = 'Nicht bereit';
+      simpleStatusDetail.textContent = `Letzter Fehler: ${status.lastError}`;
+      simpleStatusSection.classList.add('unavailable');
+    } else {
+      simpleStatusIcon.textContent = '🧩';
+      simpleStatusValue.textContent = 'Bereit zum Laden';
+      simpleStatusDetail.textContent = 'Das Modell ist lokal vorhanden, aber noch nicht initialisiert.';
+    }
+
+    btnSimpleLoad.hidden = false;
+  }
+
+  async function refreshStatus() {
+    const status = await sendRuntimeMessage({ type: 'GET_STATUS' });
+    updateEnabledUI(status.enabled !== false);
+    updateModeUI(status.mode || 'reversible');
+    updateSimpleStatusUI(status.simpleModeModelState || {});
+  }
+
+  async function checkAIStatus() {
+    updateAIStatusUI(await sendRuntimeMessage({ type: 'GET_AI_STATUS' }));
+  }
+
+  async function ensureAIReady() {
+    updateAIStatusUI(await sendRuntimeMessage({ type: 'ENSURE_AI_READY' }));
+    startAIPolling();
+  }
+
+  function startAIPolling() {
+    if (aiStatusPoll) clearInterval(aiStatusPoll);
+    aiStatusPoll = setInterval(async () => {
+      const status = await sendRuntimeMessage({ type: 'GET_AI_STATUS' });
+      updateAIStatusUI(status);
+      if (status?.ready || status?.phase === 'unavailable' || status?.phase === 'error') {
+        clearInterval(aiStatusPoll);
+        aiStatusPoll = null;
       }
-    );
+    }, 1000);
+  }
+
+  async function checkSimpleStatus() {
+    updateSimpleStatusUI(await sendRuntimeMessage({ type: 'GET_SIMPLE_MODEL_STATUS' }));
+  }
+
+  async function ensureSimpleReady() {
+    updateSimpleStatusUI(await sendRuntimeMessage({ type: 'ENSURE_SIMPLE_MODEL_READY' }));
+    startSimplePolling();
+  }
+
+  function startSimplePolling() {
+    if (simpleStatusPoll) clearInterval(simpleStatusPoll);
+    simpleStatusPoll = setInterval(async () => {
+      const status = await sendRuntimeMessage({ type: 'GET_SIMPLE_MODEL_STATUS' });
+      updateSimpleStatusUI(status);
+      if (status?.ready || !status?.loading) {
+        clearInterval(simpleStatusPoll);
+        simpleStatusPoll = null;
+      }
+    }, 1000);
   }
 
   function showMappings(mappings) {
     mappingsEmpty.style.display = 'none';
     mappingsTable.style.display = 'table';
+    mappingsStaticHint.style.display = 'none';
     mappingsTbody.innerHTML = '';
 
     for (const [fake, original] of Object.entries(mappings)) {
@@ -228,43 +282,67 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function showEmptyMappings() {
-    mappingsEmpty.style.display = 'block';
+    mappingsEmpty.style.display = currentMode === 'reversible' ? 'block' : 'none';
     mappingsTable.style.display = 'none';
+    mappingsStaticHint.style.display = currentMode === 'simple' ? 'block' : 'none';
   }
 
-  loadMappings();
+  async function loadMappings() {
+    if (!currentTabId || currentMode !== 'reversible') {
+      showEmptyMappings();
+      return;
+    }
 
-  // ─── Clear mappings ─────────────────────────────────────────────────────
+    const response = await sendRuntimeMessage({ type: 'GET_MAPPINGS', tabId: currentTabId });
+    if (response?.mappings && Object.keys(response.mappings).length > 0) {
+      showMappings(response.mappings);
+    } else {
+      showEmptyMappings();
+    }
+  }
 
-  btnClear.addEventListener('click', () => {
-    if (!currentTabId) return;
-
-    chrome.runtime.sendMessage(
-      { type: 'CLEAR_MAPPINGS', tabId: currentTabId },
-      (response) => {
-        if (response && response.success) {
-          showEmptyMappings();
-        }
-      }
-    );
+  toggleEnabled.addEventListener('change', async () => {
+    const status = await sendRuntimeMessage({ type: 'SET_ENABLED', enabled: toggleEnabled.checked });
+    updateEnabledUI(status.enabled !== false);
+    updateModeUI(status.mode || currentMode);
   });
 
-  btnClearAll.addEventListener('click', () => {
+  Object.entries(modeButtons).forEach(([mode, button]) => {
+    button.addEventListener('click', async () => {
+      const status = await sendRuntimeMessage({ type: 'SET_MODE', mode });
+      updateEnabledUI(status.enabled !== false);
+      updateModeUI(status.mode || mode);
+      updateSimpleStatusUI(status.simpleModeModelState || {});
+      await loadMappings();
+    });
+  });
+
+  btnAIDownload.addEventListener('click', ensureAIReady);
+  btnSimpleLoad.addEventListener('click', ensureSimpleReady);
+
+  btnClear.addEventListener('click', async () => {
+    if (!currentTabId || currentMode !== 'reversible') return;
+    const response = await sendRuntimeMessage({ type: 'CLEAR_MAPPINGS', tabId: currentTabId });
+    if (response?.success) showEmptyMappings();
+  });
+
+  btnClearAll.addEventListener('click', async () => {
+    if (currentMode !== 'reversible') return;
+
     const confirmed = window.confirm(
       'Alle Mappings für alle Tabs unwiderruflich löschen?\n\n' +
       'Nach dem Löschen können kopierte Antworten nicht mehr automatisch zu den Originaldaten zurückgeführt werden.'
     );
     if (!confirmed) return;
 
-    chrome.runtime.sendMessage({ type: 'CLEAR_ALL_MAPPINGS' }, (response) => {
-      if (response && response.success) {
-        showEmptyMappings();
-      }
-    });
+    const response = await sendRuntimeMessage({ type: 'CLEAR_ALL_MAPPINGS' });
+    if (response?.success) showEmptyMappings();
   });
 
-  // ─── Auto-refresh mappings ──────────────────────────────────────────────
+  await refreshStatus();
+  await checkAIStatus();
+  await checkSimpleStatus();
+  await loadMappings();
 
-  // Refresh mappings every 2 seconds while popup is open
   setInterval(loadMappings, 2000);
 });
