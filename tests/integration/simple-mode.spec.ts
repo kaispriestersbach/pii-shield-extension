@@ -17,7 +17,18 @@ async function setMode(context: BrowserContext, extensionId: string, mode: 'reve
   await expect(
     popup.locator(mode === 'simple' ? '#mode-simple' : '#mode-reversible')
   ).toHaveClass(/popup-mode-btn-active/);
+  if (mode === 'simple') {
+    await expect(popup.locator('#simple-status-value')).toContainText('Bereit', {
+      timeout: 5_000,
+    });
+  }
   await popup.close();
+}
+
+async function sendRuntimeMessage<T = Record<string, unknown>>(popup: Page, message: Record<string, unknown>): Promise<T> {
+  return popup.evaluate((payload) => new Promise<T>((resolve) => {
+    chrome.runtime.sendMessage(payload, resolve);
+  }), message);
 }
 
 async function syntheticPaste(page: Page, selector: string, text: string) {
@@ -127,8 +138,51 @@ test('popup shows simple mode status and hint text', async ({ context, extension
   await popup.locator('#mode-simple').click();
   await expect(popup.locator('#mode-simple')).toHaveClass(/popup-mode-btn-active/);
   await expect(popup.locator('#status-mode')).toContainText('Simple Mode');
+  await expect(popup.locator('#simple-status-value')).toContainText('heruntergeladen');
   await expect(popup.locator('#simple-status-value')).toContainText('Bereit');
   await expect(popup.locator('#mode-hint')).toContainText('typisierten Platzhaltern');
+
+  await popup.close();
+});
+
+test('simple mode permission denial keeps reversible mode active', async ({ context, extensionId }) => {
+  const popup = await openPopup(context, extensionId);
+  await sendRuntimeMessage(popup, {
+    type: 'TEST_SET_SIMPLE_MODEL_STATE',
+    permissionGranted: false,
+    cached: false,
+    ready: false,
+  });
+
+  const status = await sendRuntimeMessage<{
+    mode: string;
+    error?: string;
+    simpleModeModelState?: { lastError?: string };
+  }>(popup, { type: 'SET_MODE', mode: 'simple' });
+
+  expect(status.mode).toBe('reversible');
+  expect(status.error).toBe('simple_model_permission_missing');
+  expect(status.simpleModeModelState?.lastError).toBe('simple_model_permission_missing');
+
+  await popup.close();
+});
+
+test('cached simple model can activate without download permission', async ({ context, extensionId }) => {
+  const popup = await openPopup(context, extensionId);
+  await sendRuntimeMessage(popup, {
+    type: 'TEST_SET_SIMPLE_MODEL_STATE',
+    permissionGranted: false,
+    cached: true,
+    ready: false,
+  });
+
+  const status = await sendRuntimeMessage<{
+    mode: string;
+    simpleModeModelState?: { downloadState?: string };
+  }>(popup, { type: 'SET_MODE', mode: 'simple' });
+
+  expect(status.mode).toBe('simple');
+  expect(status.simpleModeModelState?.downloadState).toBe('loading');
 
   await popup.close();
 });

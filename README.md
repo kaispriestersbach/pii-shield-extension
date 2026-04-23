@@ -7,9 +7,9 @@
 PII Shield erkennt personenbezogene Daten in der Zwischenablage, bevor sie in einen KI-Chatbot eingefügt werden. Die Verarbeitung findet lokal im Browser statt und bietet jetzt zwei Betriebsarten:
 
 - **Reversible Mode:** ersetzt PII durch realistische, aber fiktive Alternativen und stellt bekannte Fake-Daten beim Kopieren wieder her.
-- **Simple Mode:** maskiert erkannte PII mit typisierten Platzhaltern wie `<PRIVATE_EMAIL>` oder `<PRIVATE_PERSON>` auf Basis des lokalen OpenAI Privacy Filter Modells. Es gibt in diesem Modus keinen Rücktausch beim Kopieren.
+- **Simple Mode:** maskiert erkannte PII mit typisierten Platzhaltern wie `<PRIVATE_EMAIL>` oder `<PRIVATE_PERSON>` auf Basis des lokal ausgeführten OpenAI Privacy Filter Modells. Beim ersten Umschalten wird das Modell von Hugging Face heruntergeladen und im Browser-Cache der Extension gespeichert. Es gibt in diesem Modus keinen Rücktausch beim Kopieren.
 
-Die Erkennung bleibt vollständig lokal im Browser – mit Chrome Built-in AI (Gemini Nano), lokalem OpenAI Privacy Filter und deterministischen Prüfern für strukturierte Daten.
+Die Erkennung bleibt lokal im Browser – mit Chrome Built-in AI (Gemini Nano), OpenAI Privacy Filter über WebGPU und deterministischen Prüfern für strukturierte Daten. Im Simple Mode werden nur Modell-Dateien heruntergeladen; zu prüfende Texte werden nicht an Hugging Face oder andere Server gesendet.
 
 ---
 
@@ -116,20 +116,22 @@ PII Shield benötigt Chrome 138 oder neuer mit aktiviertem Gemini Nano. Die folg
 3. Starte Chrome neu.
 4. Öffne `chrome://components/` und prüfe, ob **Optimization Guide On Device Model** vorhanden ist. Klicke ggf. auf **Nach Updates suchen**, um das Modell herunterzuladen.
 
-### Zusatzschritte für den Simple Mode
+### Simple Mode Modell
 
-Der Simple Mode benötigt zusätzlich das lokal gestagte OpenAI Privacy Filter Modell:
+Der Simple Mode benötigt zusätzlich das OpenAI Privacy Filter Modell. Nutzer müssen dafür kein npm ausführen:
 
-1. Bundle die Offscreen-Runtime mit `npm run build`.
-2. Stage das Modell lokal mit `npm run stage:model -- /pfad/zum/privacy-filter`.
-3. Lade die entpackte Extension in Chrome anschließend neu.
+1. Klicke im Popup auf **Simple**.
+2. Bestätige die einmalige Download-Berechtigung für Hugging Face.
+3. Warte, bis das q4-Modell heruntergeladen, lokal gecached und über WebGPU initialisiert wurde.
+
+Danach wird das Modell aus dem Browser-Cache der Extension geladen. Nur Modell-Dateien kommen von Hugging Face; Clipboard-Texte bleiben lokal.
 
 ### Hardware-Anforderungen
 
 | Anforderung | Minimum |
 |-------------|---------|
 | **Betriebssystem** | Windows 10/11, macOS 13+, Linux, ChromeOS |
-| **Speicherplatz** | 22 GB frei im Chrome-Profil-Verzeichnis |
+| **Speicherplatz** | 22 GB frei im Chrome-Profil-Verzeichnis für Gemini Nano; zusätzlich ca. 1 GB für den Simple-Mode-Modellcache |
 | **GPU** | > 4 GB VRAM |
 | **CPU (ohne GPU)** | 16 GB RAM, 4+ Kerne |
 
@@ -159,13 +161,13 @@ Zusätzlich zeigt das Content Script datensparsame Benachrichtigungen (Banner) a
 
 ### 2. Service Worker (`background.js`)
 
-Der Service Worker ist das Herzstück der PII-Erkennung. Er orchestriert sowohl den reversiblen Gemini-Nano-Flow über die Chrome Prompt API (`LanguageModel.create()`) als auch den Simple Mode mit lokalem OpenAI Privacy Filter. Zusätzlich laufen deterministische Fallback-Detektoren für strukturierte PII.
+Der Service Worker ist das Herzstück der PII-Erkennung. Er orchestriert sowohl den reversiblen Gemini-Nano-Flow über die Chrome Prompt API (`LanguageModel.create()`) als auch den Simple Mode mit lokal ausgeführtem OpenAI Privacy Filter. Beim ersten Simple-Mode-Start fordert er die optionale Download-Berechtigung an, startet den Modell-Download und verfolgt Download-/Cache-/Ready-Status. Zusätzlich laufen deterministische Fallback-Detektoren für strukturierte PII.
 
 Das Mapping wird pro Tab gespeichert (`Map<tabId, Map<fake, original>>`), sodass mehrere Tabs unabhängig voneinander arbeiten können. Die Werte liegen in `chrome.storage.session`, werden bei Tab-Schließung, Navigation, explizitem Löschen und nach Inaktivität bereinigt und nicht in `chrome.storage.local` persistiert.
 
 ### 3. Offscreen Runtime (`offscreen/`)
 
-Die Offscreen-Runtime hält das lokale OpenAI Privacy Filter Modell für den Simple Mode am Leben. Das Modell wird über Transformers.js + WebGPU geladen und ausschließlich aus lokal gestagten Modelldateien bedient. Remote-Modellzugriffe sind deaktiviert.
+Die Offscreen-Runtime hält das OpenAI Privacy Filter Modell für den Simple Mode am Leben. Die Runtime-Dateien `transformers.web.js` und ONNX-WASM sind gebundelte Extension-Dateien. Die Modellgewichte und Konfigurationen werden kontrolliert von `openai/privacy-filter` auf Hugging Face geladen, durch Transformers.js im Browser-Cache gespeichert und danach lokal über WebGPU genutzt.
 
 ### 4. Popup (`popup/`)
 
@@ -216,9 +218,9 @@ Das Popup bietet eine Übersicht über den aktuellen Status der Extension, den a
 
 PII Shield wurde mit einem strikten Privacy-by-Design-Ansatz entwickelt:
 
-- **Keine Datenübertragung:** Alle PII-Analysen finden lokal im Browser statt. Gemini Nano läuft on-device; die Extension hat keine externen Netzwerk-Endpunkte.
-- **Keine externen Server:** Die Extension kommuniziert mit keinem externen Server. Es gibt kein Backend, keine Telemetrie, kein Tracking.
-- **Minimale Berechtigungen:** Die Extension benötigt nur `storage` sowie Host-Permissions für die unterstützten Chatbot-Seiten. Clipboard-Zugriffe erfolgen über echte Paste-/Copy-Events.
+- **Keine PII-Datenübertragung:** Alle PII-Analysen finden lokal im Browser statt. Gemini Nano läuft on-device; Privacy Filter läuft nach dem Download lokal über WebGPU.
+- **Kontrollierter Modell-Download:** Im Simple Mode lädt die Extension ausschließlich Modell-Dateien von Hugging Face (`openai/privacy-filter`) und cached sie lokal. Es gibt kein Backend, keine Telemetrie, kein Tracking.
+- **Minimale Berechtigungen:** Die Extension benötigt `storage`, `unlimitedStorage`, `offscreen`, Host-Permissions für die unterstützten Chatbot-Seiten sowie optionale Hugging-Face-Download-Permissions für den Simple Mode. Clipboard-Zugriffe erfolgen über echte Paste-/Copy-Events.
 - **Keine PII in der Host-DOM:** Content-Banner zeigen nur Statusmeldungen und Zähler, keine Originalwerte oder Mapping-Tabellen.
 - **Tab-isolierte Mappings:** Jeder Tab hat sein eigenes Mapping. Bei Tab-Schließung, Navigation, Clear-Aktion oder Inaktivität werden die Daten gelöscht.
 

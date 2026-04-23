@@ -42,6 +42,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentMode = 'reversible';
   let aiStatusPoll = null;
   let simpleStatusPoll = null;
+  const simpleModelDownloadOrigins = [
+    'https://huggingface.co/*',
+    'https://*.hf.co/*',
+  ];
 
   footerVersion.textContent = `v${chrome.runtime.getManifest().version}`;
 
@@ -65,6 +69,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         resolve(response || {});
       });
     });
+  }
+
+  async function requestSimpleModelDownloadPermission() {
+    if (!chrome.permissions?.request) return false;
+
+    try {
+      return await chrome.permissions.request({ origins: simpleModelDownloadOrigins });
+    } catch {
+      return false;
+    }
   }
 
   function updateEnabledUI(enabled) {
@@ -172,20 +186,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     simpleStatusSection.className = 'popup-ai-status';
     btnSimpleLoad.hidden = true;
     btnSimpleLoad.disabled = false;
-    btnSimpleLoad.textContent = 'Lokal laden';
+    btnSimpleLoad.textContent = 'Modell laden';
 
-    if (!status?.staged) {
-      simpleStatusIcon.textContent = '📦';
-      simpleStatusValue.textContent = 'Modell nicht gestaged';
-      simpleStatusDetail.textContent = 'Führe lokal `npm run stage:model -- /pfad/zum/privacy-filter` aus und lade die Extension neu.';
+    const downloadState = status?.downloadState || 'idle';
+    const progress = Number.isFinite(status?.progress)
+      ? Math.max(0, Math.min(1, status.progress))
+      : null;
+    const progressText = progress === null ? '' : ` (${Math.round(progress * 100)}%)`;
+
+    if (downloadState === 'permission_missing' || status?.lastError === 'simple_model_permission_missing') {
+      simpleStatusIcon.textContent = '🔐';
+      simpleStatusValue.textContent = 'Download-Berechtigung fehlt';
+      simpleStatusDetail.textContent = 'Aktiviere Simple Mode erneut und bestaetige den Modell-Download von Hugging Face.';
       simpleStatusSection.classList.add('unavailable');
+      btnSimpleLoad.hidden = false;
+      btnSimpleLoad.textContent = 'Berechtigen';
       return;
     }
 
-    if (status.loading) {
-      simpleStatusIcon.textContent = '⏳';
-      simpleStatusValue.textContent = 'Lokales Modell wird geladen…';
-      simpleStatusDetail.textContent = 'Die Offscreen-Laufzeit initialisiert Privacy Filter ueber WebGPU.';
+    if (status.loading || downloadState === 'downloading' || downloadState === 'loading') {
+      simpleStatusIcon.textContent = downloadState === 'downloading' ? '⬇️' : '⏳';
+      simpleStatusValue.textContent = downloadState === 'downloading'
+        ? `Modell wird heruntergeladen…${progressText}`
+        : 'Lokales Modell wird initialisiert…';
+      simpleStatusDetail.textContent = status?.currentFile
+        ? `Aktuelle Datei: ${status.currentFile}`
+        : 'Die Offscreen-Laufzeit bereitet Privacy Filter ueber WebGPU vor.';
       btnSimpleLoad.hidden = false;
       btnSimpleLoad.disabled = true;
       btnSimpleLoad.textContent = 'Lädt…';
@@ -195,7 +221,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (status.ready) {
       simpleStatusIcon.textContent = '✅';
       simpleStatusValue.textContent = 'Bereit';
-      simpleStatusDetail.textContent = 'Privacy Filter läuft lokal im Browser über WebGPU.';
+      simpleStatusDetail.textContent = 'Privacy Filter laeuft lokal im Browser ueber WebGPU.';
       simpleStatusSection.classList.add('available');
       return;
     }
@@ -205,13 +231,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       simpleStatusValue.textContent = 'Nicht bereit';
       simpleStatusDetail.textContent = `Letzter Fehler: ${status.lastError}`;
       simpleStatusSection.classList.add('unavailable');
+      btnSimpleLoad.hidden = false;
     } else {
-      simpleStatusIcon.textContent = '🧩';
-      simpleStatusValue.textContent = 'Bereit zum Laden';
-      simpleStatusDetail.textContent = 'Das Modell ist lokal vorhanden, aber noch nicht initialisiert.';
+      simpleStatusIcon.textContent = status?.cached ? '🧩' : '📥';
+      simpleStatusValue.textContent = status?.cached ? 'Im Browser-Cache' : 'Bereit zum Download';
+      simpleStatusDetail.textContent = status?.cached
+        ? 'Das Modell ist lokal gespeichert und muss nur noch initialisiert werden.'
+        : 'Beim ersten Simple-Mode-Start wird das Modell einmalig von Hugging Face geladen.';
+      btnSimpleLoad.hidden = false;
     }
-
-    btnSimpleLoad.hidden = false;
   }
 
   async function refreshStatus() {
@@ -247,8 +275,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function ensureSimpleReady() {
-    updateSimpleStatusUI(await sendRuntimeMessage({ type: 'ENSURE_SIMPLE_MODEL_READY' }));
+    let status = await sendRuntimeMessage({ type: 'ENSURE_SIMPLE_MODEL_READY' });
+    if (status?.lastError === 'simple_model_permission_missing') {
+      const granted = await requestSimpleModelDownloadPermission();
+      if (granted) {
+        status = await sendRuntimeMessage({ type: 'ENSURE_SIMPLE_MODEL_READY' });
+      }
+    }
+
+    updateSimpleStatusUI(status);
     startSimplePolling();
+  }
+
+  function isSimpleModelWorking(status) {
+    return Boolean(status?.loading)
+      || status?.downloadState === 'downloading'
+      || status?.downloadState === 'loading';
   }
 
   function startSimplePolling() {
@@ -256,7 +298,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     simpleStatusPoll = setInterval(async () => {
       const status = await sendRuntimeMessage({ type: 'GET_SIMPLE_MODEL_STATUS' });
       updateSimpleStatusUI(status);
-      if (status?.ready || !status?.loading) {
+      if (status?.ready || (!isSimpleModelWorking(status) && status?.lastError)) {
         clearInterval(simpleStatusPoll);
         simpleStatusPoll = null;
       }
@@ -309,10 +351,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   Object.entries(modeButtons).forEach(([mode, button]) => {
     button.addEventListener('click', async () => {
-      const status = await sendRuntimeMessage({ type: 'SET_MODE', mode });
+      let status = await sendRuntimeMessage({ type: 'SET_MODE', mode });
+      if (mode === 'simple' && status?.error === 'simple_model_permission_missing') {
+        const granted = await requestSimpleModelDownloadPermission();
+        if (granted) {
+          status = await sendRuntimeMessage({ type: 'SET_MODE', mode });
+        }
+      }
+
       updateEnabledUI(status.enabled !== false);
       updateModeUI(status.mode || mode);
       updateSimpleStatusUI(status.simpleModeModelState || {});
+      if (isSimpleModelWorking(status.simpleModeModelState)) startSimplePolling();
       await loadMappings();
     });
   });
@@ -342,6 +392,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   await refreshStatus();
   await checkAIStatus();
   await checkSimpleStatus();
+  if (simpleStatusPoll === null) {
+    const status = await sendRuntimeMessage({ type: 'GET_SIMPLE_MODEL_STATUS' });
+    if (isSimpleModelWorking(status)) {
+      updateSimpleStatusUI(status);
+      startSimplePolling();
+    }
+  }
   await loadMappings();
 
   setInterval(loadMappings, 2000);

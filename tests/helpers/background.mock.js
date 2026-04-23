@@ -8,6 +8,7 @@
 'use strict';
 
 const ANONYMIZE_DELAY_MS = 180;
+const SIMPLE_READY_DELAY_MS = 800;
 
 const REPLACEMENTS = {
   'Max Mustermann': 'Thomas Weber',
@@ -23,16 +24,34 @@ const REVERSE_REPLACEMENTS = Object.fromEntries(
   Object.entries(REPLACEMENTS).map(([original, fake]) => [fake, original])
 );
 
-const SIMPLE_MODEL_STATE = {
-  staged: true,
+const INITIAL_SIMPLE_MODEL_STATE = {
   ready: true,
   loading: false,
+  cached: true,
+  permissionGranted: true,
+  downloadState: 'ready',
+  progress: 1,
+  loadedBytes: null,
+  totalBytes: null,
+  currentFile: null,
   lastError: null,
   runtime: 'webgpu',
+  source: 'huggingface',
+  modelRevision: 'test-revision',
 };
 
 let isEnabled = true;
 let mode = 'reversible';
+let simplePermissionGranted = true;
+let simpleModelCached = false;
+let simpleModelState = {
+  ...INITIAL_SIMPLE_MODEL_STATE,
+  ready: false,
+  cached: false,
+  downloadState: 'idle',
+  progress: null,
+};
+let simpleReadyTimer = null;
 const tabMappings = new Map();
 
 function baseTransformResult(text, overrides = {}) {
@@ -69,8 +88,68 @@ function currentStatus() {
   return {
     enabled: isEnabled,
     mode,
-    simpleModeModelState: SIMPLE_MODEL_STATE,
+    simpleModeModelState: { ...simpleModelState },
   };
+}
+
+function setSimpleModelState(patch) {
+  simpleModelState = {
+    ...simpleModelState,
+    ...patch,
+    runtime: 'webgpu',
+    source: 'huggingface',
+    modelRevision: 'test-revision',
+  };
+}
+
+function stopSimpleReadyTimer() {
+  if (simpleReadyTimer) clearTimeout(simpleReadyTimer);
+  simpleReadyTimer = null;
+}
+
+function startSimpleModelWarmup() {
+  if (simpleModelState.ready) return;
+
+  stopSimpleReadyTimer();
+  setSimpleModelState({
+    ready: false,
+    loading: true,
+    cached: simpleModelCached,
+    permissionGranted: simplePermissionGranted,
+    downloadState: simpleModelCached ? 'loading' : 'downloading',
+    progress: simpleModelCached ? 1 : 0.18,
+    currentFile: simpleModelCached ? null : 'onnx/model_q4.onnx_data',
+    lastError: null,
+  });
+
+  simpleReadyTimer = setTimeout(() => {
+    simpleModelCached = true;
+    setSimpleModelState({
+      ready: true,
+      loading: false,
+      cached: true,
+      permissionGranted: simplePermissionGranted,
+      downloadState: 'ready',
+      progress: 1,
+      currentFile: null,
+      lastError: null,
+    });
+    simpleReadyTimer = null;
+  }, SIMPLE_READY_DELAY_MS);
+}
+
+function setSimplePermissionMissing() {
+  stopSimpleReadyTimer();
+  setSimpleModelState({
+    ready: false,
+    loading: false,
+    cached: false,
+    permissionGranted: false,
+    downloadState: 'permission_missing',
+    progress: null,
+    currentFile: null,
+    lastError: 'simple_model_permission_missing',
+  });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -91,6 +170,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         if (mode === 'simple') {
+          if (!simpleModelState.ready) {
+            sendResponse(baseTransformResult(message.text, {
+              requiresManualDecision: true,
+              manualDecisionReason: simpleModelState.loading
+                ? 'simple_model_downloading'
+                : simpleModelState.lastError || 'simple_model_unavailable',
+            }));
+            return;
+          }
+
           sendResponse(baseTransformResult(message.text, {
             hasPII: true,
             outputText: applyMap(message.text, SIMPLE_MASKS),
@@ -144,8 +233,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case 'SET_MODE': {
+      if (message.mode === 'simple' && !simplePermissionGranted && !simpleModelCached) {
+        setSimplePermissionMissing();
+        sendResponse({
+          ...currentStatus(),
+          error: 'simple_model_permission_missing',
+        });
+        return false;
+      }
+
       mode = message.mode === 'simple' ? 'simple' : 'reversible';
       tabMappings.clear();
+      if (mode === 'simple') startSimpleModelWarmup();
       chrome.storage.local.set({ piiShieldMode: mode }).then(() => {
         sendResponse(currentStatus());
       });
@@ -153,8 +252,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case 'GET_SIMPLE_MODEL_STATUS':
+      sendResponse({ ...simpleModelState });
+      return false;
+
     case 'ENSURE_SIMPLE_MODEL_READY':
-      sendResponse({ ...SIMPLE_MODEL_STATE });
+      if (!simplePermissionGranted && !simpleModelCached) {
+        setSimplePermissionMissing();
+      } else {
+        startSimpleModelWarmup();
+      }
+      sendResponse({ ...simpleModelState });
       return false;
 
     case 'GET_AI_STATUS':
@@ -180,6 +287,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       tabMappings.clear();
       sendResponse({ success: true });
       return false;
+
+    case 'TEST_SET_SIMPLE_MODEL_STATE': {
+      stopSimpleReadyTimer();
+      simplePermissionGranted = message.permissionGranted !== undefined
+        ? Boolean(message.permissionGranted)
+        : simplePermissionGranted;
+      simpleModelCached = message.cached !== undefined
+        ? Boolean(message.cached)
+        : simpleModelCached;
+
+      const ready = Boolean(message.ready);
+      setSimpleModelState({
+        ready,
+        loading: false,
+        cached: ready || simpleModelCached,
+        permissionGranted: simplePermissionGranted,
+        downloadState: ready ? 'ready' : simpleModelCached ? 'cached' : 'idle',
+        progress: ready ? 1 : null,
+        currentFile: null,
+        lastError: null,
+      });
+      sendResponse({ ...simpleModelState });
+      return false;
+    }
 
     default:
       sendResponse({});

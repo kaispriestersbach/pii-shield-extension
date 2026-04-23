@@ -1,11 +1,14 @@
 import { env, pipeline } from './vendor/transformers.web.js';
 
 const MODEL_ID = 'openai/privacy-filter';
+const MODEL_REVISION = '7ffa9a043d54d1be65afb281eddf0ffbe629385b';
+const MODEL_SOURCE = 'huggingface';
 const RUNTIME = 'webgpu';
 
-env.allowRemoteModels = false;
-env.allowLocalModels = true;
-env.localModelPath = chrome.runtime.getURL('models/');
+env.allowRemoteModels = true;
+env.allowLocalModels = false;
+env.remoteHost = 'https://huggingface.co/';
+env.remotePathTemplate = '{model}/resolve/{revision}/';
 env.useBrowserCache = true;
 env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('offscreen/vendor/');
 
@@ -13,6 +16,13 @@ let classifier = null;
 let classifierPromise = null;
 let loading = false;
 let lastError = null;
+let modelProgress = {
+  downloadState: 'idle',
+  progress: null,
+  loadedBytes: null,
+  totalBytes: null,
+  currentFile: null,
+};
 
 function createError(code, message, cause = null) {
   const error = new Error(message);
@@ -27,8 +37,11 @@ function normalizeOffscreenError(error, fallbackCode) {
   if (!globalThis.navigator?.gpu) {
     return createError('webgpu_unavailable', 'WebGPU is not available in the offscreen runtime.', error);
   }
-  if (/Failed to fetch|404|not found/i.test(message)) {
-    return createError('simple_model_missing', 'The staged Privacy Filter model could not be found.', error);
+  if (/quota|QuotaExceeded/i.test(message)) {
+    return createError('simple_model_cache_quota_exceeded', message, error);
+  }
+  if (/Failed to fetch|Load failed|NetworkError|404|403|not found|CORS/i.test(message)) {
+    return createError('simple_model_download_failed', 'The Privacy Filter model could not be downloaded.', error);
   }
   if (/webgpu/i.test(message)) {
     return createError('webgpu_unavailable', message, error);
@@ -37,12 +50,51 @@ function normalizeOffscreenError(error, fallbackCode) {
   return createError(fallbackCode, message || fallbackCode, error);
 }
 
+function updateModelProgress(patch) {
+  modelProgress = {
+    ...modelProgress,
+    ...patch,
+  };
+}
+
+function normalizeProgressValue(progress, loaded, total) {
+  if (Number.isFinite(progress)) {
+    return progress > 1 ? progress / 100 : progress;
+  }
+  if (Number.isFinite(loaded) && Number.isFinite(total) && total > 0) {
+    return loaded / total;
+  }
+  return null;
+}
+
+function handleModelProgress(event) {
+  const loaded = Number.isFinite(event?.loaded) ? event.loaded : null;
+  const total = Number.isFinite(event?.total) ? event.total : null;
+  const progress = normalizeProgressValue(event?.progress, loaded, total);
+  const status = String(event?.status || '');
+
+  updateModelProgress({
+    downloadState: status === 'download' || status === 'progress'
+      ? 'downloading'
+      : loading
+        ? 'loading'
+        : modelProgress.downloadState,
+    progress,
+    loadedBytes: loaded,
+    totalBytes: total,
+    currentFile: event?.file || modelProgress.currentFile,
+  });
+}
+
 function getStatus() {
   return {
     ready: Boolean(classifier),
     loading,
     lastError,
     runtime: RUNTIME,
+    source: MODEL_SOURCE,
+    modelRevision: MODEL_REVISION,
+    ...modelProgress,
   };
 }
 
@@ -55,19 +107,38 @@ async function ensureClassifier() {
 
   loading = true;
   lastError = null;
+  updateModelProgress({
+    downloadState: 'loading',
+    progress: null,
+    loadedBytes: null,
+    totalBytes: null,
+    currentFile: null,
+  });
 
   classifierPromise = pipeline('token-classification', MODEL_ID, {
     device: RUNTIME,
     dtype: 'q4',
+    revision: MODEL_REVISION,
+    progress_callback: handleModelProgress,
   })
     .then((instance) => {
       classifier = instance;
       lastError = null;
+      updateModelProgress({
+        downloadState: 'ready',
+        progress: 1,
+        loadedBytes: null,
+        totalBytes: null,
+        currentFile: null,
+      });
       return classifier;
     })
     .catch((error) => {
       const normalized = normalizeOffscreenError(error, 'simple_model_init_failed');
       lastError = normalized.code;
+      updateModelProgress({
+        downloadState: 'error',
+      });
       throw normalized;
     })
     .finally(() => {

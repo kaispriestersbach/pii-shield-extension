@@ -61,7 +61,15 @@
   function manualDecisionMessageFor(code) {
     switch (code) {
       case 'simple_model_missing':
-        return 'Das lokale Privacy-Filter-Modell ist noch nicht bereitgestellt. Bitte fuehre zuerst den lokalen Stage-Schritt fuer den Simple Mode aus.';
+        return 'Das Privacy-Filter-Modell ist noch nicht heruntergeladen. Bitte starte den Simple Mode im Popup und warte, bis der lokale Download abgeschlossen ist.';
+      case 'simple_model_permission_missing':
+        return 'Der Simple Mode braucht einmalig die Download-Berechtigung fuer das Privacy-Filter-Modell. Bitte aktiviere Simple Mode im Popup und bestaetige die Berechtigung.';
+      case 'simple_model_downloading':
+        return 'Das Privacy-Filter-Modell wird gerade heruntergeladen oder initialisiert. Bitte warte, bis der Simple Mode als bereit angezeigt wird.';
+      case 'simple_model_download_failed':
+        return 'Das Privacy-Filter-Modell konnte nicht heruntergeladen werden. Bitte pruefe die Verbindung und versuche es im Popup erneut.';
+      case 'simple_model_cache_quota_exceeded':
+        return 'Chrome konnte das Privacy-Filter-Modell nicht lokal speichern. Bitte pruefe den freien Speicherplatz und lade das Modell erneut.';
       case 'webgpu_unavailable':
         return 'WebGPU ist in diesem Browserprofil nicht verfuegbar. Der Simple Mode kann den Text deshalb nicht lokal maskieren.';
       case 'offscreen_unavailable':

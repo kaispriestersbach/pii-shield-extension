@@ -5,7 +5,12 @@
   "description": "Automatically detects, anonymizes or masks personally identifiable information (PII) before pasting into AI chatbots. Supports reversible Gemini Nano mode and local Privacy Filter simple mode.",
   "permissions": [
     "storage",
+    "unlimitedStorage",
     "offscreen"
+  ],
+  "optional_host_permissions": [
+    "https://huggingface.co/*",
+    "https://*.hf.co/*"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",

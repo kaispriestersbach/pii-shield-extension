@@ -2,8 +2,8 @@
  * PII Shield – Background Service Worker
  *
  * Reversible mode keeps the existing Gemini Nano + mapping workflow.
- * Simple mode uses a local OpenAI Privacy Filter runtime in an offscreen
- * document and masks spans with typed placeholders without reverse mapping.
+ * Simple mode uses an offscreen OpenAI Privacy Filter runtime and caches the
+ * model locally after its first controlled download.
  */
 
 import { applyReplacements, buildReplacementEntries } from './replacement-engine.js';
@@ -50,24 +50,40 @@ let initializationPromise = Promise.resolve();
 let offscreenCreationPromise = null;
 
 let simpleModeModelState = {
-  staged: false,
   ready: false,
   loading: false,
+  cached: false,
+  permissionGranted: false,
+  downloadState: 'idle',
+  progress: null,
+  loadedBytes: null,
+  totalBytes: null,
+  currentFile: null,
   lastError: null,
   runtime: 'webgpu',
+  source: 'huggingface',
+  modelRevision: '7ffa9a043d54d1be65afb281eddf0ffbe629385b',
   updatedAt: null,
 };
 
 const DETECTION_TIMEOUT_MS = 12000;
 const MAPPING_TTL_MS = 30 * 60 * 1000;
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen/offscreen.html';
-const SIMPLE_MODEL_FILES = [
-  'models/openai/privacy-filter/config.json',
-  'models/openai/privacy-filter/tokenizer.json',
-  'models/openai/privacy-filter/tokenizer_config.json',
-  'models/openai/privacy-filter/viterbi_calibration.json',
-  'models/openai/privacy-filter/onnx/model_q4.onnx',
-  'models/openai/privacy-filter/onnx/model_q4.onnx_data',
+const SIMPLE_MODEL_ID = 'openai/privacy-filter';
+const SIMPLE_MODEL_REVISION = '7ffa9a043d54d1be65afb281eddf0ffbe629385b';
+const SIMPLE_MODEL_SOURCE = 'huggingface';
+const SIMPLE_MODEL_CACHE_NAME = 'transformers-cache';
+const SIMPLE_MODEL_DOWNLOAD_ORIGINS = [
+  'https://huggingface.co/*',
+  'https://*.hf.co/*',
+];
+const SIMPLE_MODEL_REMOTE_FILES = [
+  'config.json',
+  'tokenizer.json',
+  'tokenizer_config.json',
+  'viterbi_calibration.json',
+  'onnx/model_q4.onnx',
+  'onnx/model_q4.onnx_data',
 ];
 
 const PII_RESPONSE_SCHEMA = {
@@ -173,6 +189,8 @@ function setSimpleModeModelState(patch) {
     ...simpleModeModelState,
     ...patch,
     runtime: 'webgpu',
+    source: SIMPLE_MODEL_SOURCE,
+    modelRevision: SIMPLE_MODEL_REVISION,
     updatedAt: Date.now(),
   };
 }
@@ -597,44 +615,109 @@ async function detectAndAnonymize(text, tabId) {
   }
 }
 
-// ─── Simple Mode: Model Staging / Offscreen Runtime ────────────────────────
+// ─── Simple Mode: Remote Model Cache / Offscreen Runtime ───────────────────
 
-async function isSimpleModelStaged() {
-  const checks = await Promise.all(
-    SIMPLE_MODEL_FILES.map(async (relativePath) => {
-      try {
-        const response = await fetch(chrome.runtime.getURL(relativePath), { cache: 'no-store' });
-        return response.ok;
-      } catch {
-        return false;
-      }
-    })
-  );
+function simpleModelRemoteUrl(relativePath) {
+  return `https://huggingface.co/${SIMPLE_MODEL_ID}/resolve/${encodeURIComponent(SIMPLE_MODEL_REVISION)}/${relativePath}`;
+}
 
-  return checks.every(Boolean);
+async function hasSimpleModelDownloadPermission() {
+  if (!chrome.permissions?.contains) return true;
+
+  try {
+    return await chrome.permissions.contains({ origins: SIMPLE_MODEL_DOWNLOAD_ORIGINS });
+  } catch {
+    return false;
+  }
+}
+
+async function requestSimpleModelDownloadPermission() {
+  if (!chrome.permissions?.request) return true;
+
+  try {
+    return await chrome.permissions.request({ origins: SIMPLE_MODEL_DOWNLOAD_ORIGINS });
+  } catch {
+    return false;
+  }
+}
+
+async function isSimpleModelCached() {
+  if (typeof caches === 'undefined') return false;
+
+  try {
+    const cache = await caches.open(SIMPLE_MODEL_CACHE_NAME);
+    const checks = await Promise.all(
+      SIMPLE_MODEL_REMOTE_FILES.map((relativePath) => cache.match(simpleModelRemoteUrl(relativePath)))
+    );
+    return checks.every(Boolean);
+  } catch {
+    return false;
+  }
 }
 
 async function refreshSimpleModeModelState() {
-  const staged = await isSimpleModelStaged();
+  const [cached, permissionGranted] = await Promise.all([
+    isSimpleModelCached(),
+    hasSimpleModelDownloadPermission(),
+  ]);
 
-  if (!staged) {
-    setSimpleModeModelState({
-      staged: false,
-      ready: false,
-      loading: false,
-      lastError: 'simple_model_missing',
-    });
-    return getSimpleModeModelStateSnapshot();
-  }
+  const nextDownloadState = simpleModeModelState.ready
+    ? 'ready'
+    : simpleModeModelState.loading
+      ? simpleModeModelState.downloadState
+      : cached
+        ? 'cached'
+        : permissionGranted
+          ? 'idle'
+          : simpleModeModelState.downloadState === 'permission_missing'
+          ? 'permission_missing'
+          : 'idle';
+  const previousError = simpleModeModelState.lastError;
 
   setSimpleModeModelState({
-    staged: true,
-    lastError: simpleModeModelState.lastError === 'simple_model_missing'
-      ? null
-      : simpleModeModelState.lastError,
+    cached,
+    permissionGranted,
+    downloadState: nextDownloadState,
+    lastError: cached || permissionGranted
+      ? previousError === 'simple_model_permission_missing' ? null : previousError
+      : previousError,
   });
 
   return getSimpleModeModelStateSnapshot();
+}
+
+async function prepareSimpleModelDownloadAccess({ requestPermission = false } = {}) {
+  const cached = await isSimpleModelCached();
+  let permissionGranted = await hasSimpleModelDownloadPermission();
+
+  if (!cached && !permissionGranted && requestPermission) {
+    permissionGranted = await requestSimpleModelDownloadPermission();
+  }
+
+  if (!cached && !permissionGranted) {
+    setSimpleModeModelState({
+      cached,
+      permissionGranted,
+      ready: false,
+      loading: false,
+      downloadState: 'permission_missing',
+      progress: null,
+      loadedBytes: null,
+      totalBytes: null,
+      currentFile: null,
+      lastError: 'simple_model_permission_missing',
+    });
+    return false;
+  }
+
+  setSimpleModeModelState({
+    cached,
+    permissionGranted,
+    lastError: simpleModeModelState.lastError === 'simple_model_permission_missing'
+      ? null
+      : simpleModeModelState.lastError,
+  });
+  return true;
 }
 
 async function hasOffscreenDocument() {
@@ -697,16 +780,28 @@ async function sendOffscreenRequest(type, payload = {}) {
 
 function applyOffscreenStatus(status) {
   setSimpleModeModelState({
-    staged: simpleModeModelState.staged,
     ready: Boolean(status?.ready),
     loading: Boolean(status?.loading),
+    cached: Boolean(status?.ready) || simpleModeModelState.cached,
+    downloadState: status?.downloadState
+      || (status?.ready ? 'ready' : status?.loading ? 'loading' : simpleModeModelState.downloadState),
+    progress: Number.isFinite(status?.progress) ? status.progress : simpleModeModelState.progress,
+    loadedBytes: Number.isFinite(status?.loadedBytes) ? status.loadedBytes : status?.loadedBytes ?? null,
+    totalBytes: Number.isFinite(status?.totalBytes) ? status.totalBytes : status?.totalBytes ?? null,
+    currentFile: status?.currentFile || null,
     lastError: status?.lastError || null,
   });
 }
 
 async function getSimpleModeStatus() {
   await refreshSimpleModeModelState();
-  if (!simpleModeModelState.staged) return getSimpleModeModelStateSnapshot();
+  if (
+    simpleModeModelState.downloadState === 'permission_missing'
+    && !simpleModeModelState.cached
+    && !simpleModeModelState.permissionGranted
+  ) {
+    return getSimpleModeModelStateSnapshot();
+  }
 
   try {
     const status = await sendOffscreenRequest('GET_SIMPLE_MODEL_STATUS');
@@ -722,23 +817,39 @@ async function getSimpleModeStatus() {
   return getSimpleModeModelStateSnapshot();
 }
 
-async function ensureSimpleModeModelReady() {
-  await refreshSimpleModeModelState();
-  if (!simpleModeModelState.staged) return getSimpleModeModelStateSnapshot();
+async function ensureSimpleModeModelReady({ requestPermission = false } = {}) {
+  const canAccessModel = await prepareSimpleModelDownloadAccess({ requestPermission });
+  if (!canAccessModel) return getSimpleModeModelStateSnapshot();
 
   setSimpleModeModelState({
     loading: true,
+    downloadState: simpleModeModelState.cached ? 'loading' : 'downloading',
+    progress: simpleModeModelState.cached ? 1 : simpleModeModelState.progress,
+    currentFile: null,
     lastError: null,
   });
 
   try {
     const status = await sendOffscreenRequest('ENSURE_SIMPLE_MODEL_READY');
+    const responseError = responseErrorToException(status, 'simple_model_init_failed');
+    if (responseError) throw responseError;
     applyOffscreenStatus(status);
-  } catch {
+  } catch (error) {
+    const [cached, permissionGranted] = await Promise.all([
+      isSimpleModelCached(),
+      hasSimpleModelDownloadPermission(),
+    ]);
+    const lastError = !cached && !permissionGranted
+      ? 'simple_model_permission_missing'
+      : error?.code || 'simple_model_init_failed';
+
     setSimpleModeModelState({
+      cached,
+      permissionGranted,
       ready: false,
       loading: false,
-      lastError: 'offscreen_unavailable',
+      downloadState: lastError === 'simple_model_permission_missing' ? 'permission_missing' : 'error',
+      lastError,
     });
   }
 
@@ -793,9 +904,19 @@ async function detectSimpleModeEntities(text) {
 }
 
 async function detectAndMaskSimple(text) {
-  const modelState = await ensureSimpleModeModelReady();
-  if (!modelState.staged || !modelState.ready) {
-    return manualDecisionResult(text, modelState.lastError || 'simple_model_unavailable');
+  const modelState = await getSimpleModeStatus();
+  if (!modelState.ready) {
+    if (!modelState.loading && modelState.downloadState !== 'permission_missing') {
+      void ensureSimpleModeModelReady();
+    }
+
+    const isDownloading = modelState.loading
+      || modelState.downloadState === 'downloading'
+      || modelState.downloadState === 'loading';
+    return manualDecisionResult(
+      text,
+      isDownloading ? 'simple_model_downloading' : modelState.lastError || 'simple_model_unavailable'
+    );
   }
 
   try {
@@ -973,11 +1094,38 @@ async function maybeWarmSelectedMode() {
     void ensureAISessionStarted();
     return;
   }
-  void ensureSimpleModeModelReady();
+  const canAccessModel = await prepareSimpleModelDownloadAccess();
+  if (canAccessModel) void ensureSimpleModeModelReady();
 }
 
 async function setMode(nextMode) {
-  piiShieldMode = nextMode === 'simple' ? 'simple' : 'reversible';
+  if (nextMode === 'simple') {
+    const canAccessModel = await prepareSimpleModelDownloadAccess({ requestPermission: true });
+    if (!canAccessModel) {
+      return {
+        ...getStatusPayload(),
+        error: 'simple_model_permission_missing',
+      };
+    }
+
+    piiShieldMode = 'simple';
+    await chrome.storage.local.set({ piiShieldMode });
+    await clearAllMappings();
+
+    if (!simpleModeModelState.ready) {
+      setSimpleModeModelState({
+        loading: true,
+        downloadState: simpleModeModelState.cached ? 'loading' : 'downloading',
+        progress: simpleModeModelState.cached ? 1 : simpleModeModelState.progress,
+        lastError: null,
+      });
+      void ensureSimpleModeModelReady();
+    }
+
+    return getStatusPayload();
+  }
+
+  piiShieldMode = 'reversible';
   await chrome.storage.local.set({ piiShieldMode });
   await clearAllMappings();
   await maybeWarmSelectedMode();
@@ -1104,7 +1252,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'ENSURE_SIMPLE_MODEL_READY': {
       initializationPromise
-        .then(() => ensureSimpleModeModelReady())
+        .then(() => ensureSimpleModeModelReady({ requestPermission: true }))
         .then((status) => sendResponse(status))
         .catch((error) => {
           console.error('[PII Shield] Simple mode warm-up error:', error);

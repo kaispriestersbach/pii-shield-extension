@@ -62,8 +62,8 @@
         <span class="popup-ai-status-value" id="simple-status-value">Prüfung im Service Worker…</span>
         <span class="popup-ai-status-detail" id="simple-status-detail">Lokal im Browser, ohne externe Dienste.</span>
       </div>
-      <button class="popup-ai-status-action" id="btn-simple-load" hidden title="Lokales Privacy-Filter-Modell laden">
-        Lokal laden
+      <button class="popup-ai-status-action" id="btn-simple-load" hidden title="Privacy-Filter-Modell herunterladen und lokal initialisieren">
+        Modell laden
       </button>
     </div>
 
@@ -114,18 +114,18 @@
     </div>
 
     <div class="popup-section">
-      <h2>Lokales Staging</h2>
+      <h2>Simple Mode Modell</h2>
       <div class="popup-info-step popup-install-step">
         <span class="popup-info-step-num">1</span>
-        <span>Bundle das Offscreen-Runtime-Skript mit <strong>`npm run build`</strong>.</span>
+        <span>Beim ersten Umschalten auf Simple Mode fragt PII Shield die Download-Berechtigung fuer Hugging Face an.</span>
       </div>
       <div class="popup-info-step popup-install-step">
         <span class="popup-info-step-num">2</span>
-        <span>Stelle das Privacy-Filter-Modell lokal mit <strong>`npm run stage:model -- /pfad/zum/privacy-filter`</strong> bereit.</span>
+        <span>Das q4 Privacy-Filter-Modell wird heruntergeladen und im Browser-Cache der Extension gespeichert.</span>
       </div>
       <div class="popup-info-step popup-install-step">
         <span class="popup-info-step-num">3</span>
-        <span>Lade danach die entpackte Extension neu, damit der Simple Mode das lokale Modell findet.</span>
+        <span>Nach dem Download laeuft die Analyse lokal ueber WebGPU; deine Texte werden nicht an Hugging Face gesendet.</span>
       </div>
     </div>
 

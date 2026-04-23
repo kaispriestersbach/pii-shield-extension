@@ -4,7 +4,12 @@
   "version": "0.0.1",
   "description": "Test build with broad permissions for Playwright integration tests.",
   "permissions": [
-    "storage"
+    "storage",
+    "unlimitedStorage"
+  ],
+  "optional_host_permissions": [
+    "https://huggingface.co/*",
+    "https://*.hf.co/*"
   ],
   "host_permissions": [
     "<all_urls>"
