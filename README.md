@@ -75,6 +75,19 @@ Die Erkennung kombiniert Gemini Nano mit deterministischen Prüfern für struktu
 
 ---
 
+## Sprachabdeckung & Internationalisierung
+
+OpenAI Privacy Filter ist nach OpenAIs Model Card **nicht nur englisch**, aber **primär für Englisch ausgewiesen**. OpenAI beschreibt die Modellsprachen als “Primarily English” mit ausgewählten mehrsprachigen Robustheits-Evaluationen. Für die Internationalisierung von PII Shield bedeutet das:
+
+- **Gut dokumentierte Benchmark-Sprachen:** Englisch, Deutsch, Französisch, Spanisch, Italienisch und Niederländisch sind im mehrsprachigen PII-Masking-300k-Benchmark separat ausgewiesen; Deutsch liegt dort nahe an Englisch.
+- **Zusätzlich synthetisch evaluiert:** Bengali, Hausa, Hindi, Indonesisch, Japanisch, Koreanisch, Mandarin-Chinesisch, Modern Standard Arabic, Portugiesisch, Russisch, Türkisch, Urdu und Western Punjabi wurden in erweiterten synthetischen multilingualen Tests berichtet.
+- **Produktentscheidung:** Die UI kann internationalisiert werden, aber die Erkennungsqualität sollte pro Zielsprache mit lokalen Testtexten validiert werden. Für Deutsch ist der Simple Mode plausibel, sollte aber nicht als identisch zuverlässig zu englischem Text beworben werden.
+- **Wichtige Einschränkung:** OpenAI warnt vor Leistungsabfall bei nicht-englischem Text, nicht-lateinischen Schriften, regionalen Namensmustern und Domains außerhalb der Trainingsverteilung.
+
+Quellen: [OpenAI Privacy Filter auf Hugging Face](https://huggingface.co/openai/privacy-filter) und [OpenAI Privacy Filter Model Card](https://cdn.openai.com/pdf/c66281ed-b638-456a-8ce1-97e9f5264a90/OpenAI-Privacy-Filter-Model-Card.pdf).
+
+---
+
 ## Unterstützte Plattformen
 
 PII Shield ist auf 14 KI-Chatbot- und KI-Such-Plattformen aktiv:
@@ -230,6 +243,7 @@ PII Shield wurde mit einem strikten Privacy-by-Design-Ansatz entwickelt:
 
 - **Gemini Nano erforderlich:** Die Extension funktioniert nur in Chrome-Versionen, die die Prompt API unterstützen (Chrome 138+). Das Modell muss heruntergeladen sein.
 - **KI-basierte Erkennung:** Da ein Teil der PII-Erkennung durch ein Sprachmodell erfolgt, kann es zu False Positives (fälschlich erkannte PII) oder False Negatives (übersehene PII) kommen. Die deterministischen Prüfer verbessern strukturierte Kategorien, ersetzen aber keine vollständige Datenschutzprüfung.
+- **Sprachabdeckung:** Privacy Filter ist primär englisch dokumentiert und multilingual evaluiert, aber nicht für alle Sprachen gleich robust. Nicht-lateinische Schriften, regionale Namenskonventionen und domänenspezifische Texte brauchen eigene Akzeptanztests.
 - **Fail-closed:** Wenn Gemini Nano nicht verfügbar ist, das Modell noch lädt, die strukturierte Antwort ungültig ist oder die Analyse timeoutet, wird der Paste-Vorgang blockiert.
 - **Textbasiert:** Aktuell werden nur Texteinfügungen über die Zwischenablage überwacht. Datei-Uploads werden nicht analysiert.
 - **Latenz:** Die PII-Analyse durch Gemini Nano kann je nach Hardware 1–5 Sekunden dauern. Während dieser Zeit wird das Einfügen blockiert.

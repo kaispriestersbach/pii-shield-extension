@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PII Shield – AI Privacy Guard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Automatically detects, anonymizes or masks personally identifiable information (PII) before pasting into AI chatbots. Supports reversible Gemini Nano mode and local Privacy Filter simple mode.",
   "permissions": [
     "storage",
