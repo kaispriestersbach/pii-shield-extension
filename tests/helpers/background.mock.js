@@ -9,6 +9,8 @@
 
 'use strict';
 
+const ANONYMIZE_DELAY_MS = 180;
+
 const REPLACEMENTS = {
   'Max Mustermann': 'Thomas Weber',
   'max@test.de': 't.weber@example.com',
@@ -33,14 +35,16 @@ function hasPII(text) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   switch (message.type) {
     case 'ANONYMIZE_TEXT': {
-      const found = hasPII(message.text);
-      if (!found) {
-        sendResponse({ hasPII: false, anonymizedText: message.text, replacements: {} });
-        return false;
-      }
-      const anonymizedText = applyMap(message.text, REPLACEMENTS);
-      sendResponse({ hasPII: true, anonymizedText, replacements: REPLACEMENTS });
-      return false;
+      setTimeout(() => {
+        const found = hasPII(message.text);
+        if (!found) {
+          sendResponse({ hasPII: false, anonymizedText: message.text, replacements: {} });
+          return;
+        }
+        const anonymizedText = applyMap(message.text, REPLACEMENTS);
+        sendResponse({ hasPII: true, anonymizedText, replacements: REPLACEMENTS });
+      }, ANONYMIZE_DELAY_MS);
+      return true;
     }
     case 'DEANONYMIZE_TEXT': {
       const deanonymizedText = applyMap(message.text, REVERSE_REPLACEMENTS);

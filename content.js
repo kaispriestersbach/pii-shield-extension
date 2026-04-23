@@ -135,6 +135,59 @@
     return div.innerHTML;
   }
 
+  function createPasteStatusIndicator() {
+    let indicator = document.getElementById('pii-shield-paste-status');
+    if (indicator) return indicator;
+
+    indicator = document.createElement('div');
+    indicator.id = 'pii-shield-paste-status';
+    indicator.className = 'pii-shield-paste-status';
+    indicator.setAttribute('role', 'status');
+    indicator.setAttribute('aria-live', 'polite');
+    document.body.appendChild(indicator);
+    return indicator;
+  }
+
+  function updatePasteStatusIndicator() {
+    const totalPending = pasteQueue.length + (pasteWorkerRunning ? 1 : 0);
+    const badge = document.getElementById('pii-shield-badge');
+    if (badge) {
+      badge.classList.toggle('pii-shield-badge-busy', totalPending > 0);
+    }
+
+    const indicator = document.getElementById('pii-shield-paste-status')
+      || (totalPending > 0 ? createPasteStatusIndicator() : null);
+    if (!indicator) return;
+
+    if (totalPending === 0) {
+      indicator.className = 'pii-shield-paste-status';
+      indicator.innerHTML = '';
+      return;
+    }
+
+    const queuedBehindCurrent = pasteWorkerRunning ? pasteQueue.length : Math.max(pasteQueue.length - 1, 0);
+    const detail = pasteWorkerRunning
+      ? queuedBehindCurrent > 0
+        ? `Der aktuelle Text wird lokal geprüft. ${queuedBehindCurrent} weiterer Einfügevorgang wartet bereits.`
+        : 'Der Text wird lokal geprüft und danach automatisch eingefügt.'
+      : 'Die lokale Prüfung startet sofort.';
+
+    const countBadge = totalPending > 1
+      ? `<span class="pii-shield-paste-status-count">${totalPending}</span>`
+      : '';
+
+    indicator.innerHTML = `
+      <div class="pii-shield-paste-status-content">
+        <span class="pii-shield-paste-status-spinner" aria-hidden="true"></span>
+        <div class="pii-shield-paste-status-text">
+          <strong>PII Shield prüft das Einfügen…</strong>
+          <span>${escapeHtml(detail)}</span>
+        </div>
+        ${countBadge}
+      </div>`;
+    indicator.className = 'pii-shield-paste-status pii-shield-paste-status-visible';
+  }
+
   // ─── Status Badge ─────────────────────────────────────────────────────────
 
   function updateBadge() {
@@ -149,6 +202,7 @@
       document.body.appendChild(badge);
     }
     badge.classList.toggle('pii-shield-badge-disabled', !isEnabled);
+    badge.classList.toggle('pii-shield-badge-busy', pasteQueue.length + (pasteWorkerRunning ? 1 : 0) > 0);
     badge.title = isEnabled ? 'PII Shield aktiv – Klicken zum Deaktivieren' : 'PII Shield inaktiv – Klicken zum Aktivieren';
   }
 
@@ -181,19 +235,23 @@
     event.stopImmediatePropagation();
 
     pasteQueue.push({ text, target });
+    updatePasteStatusIndicator();
     runPasteWorker();
   }, true); // Capture phase — intercept before the page's own handlers
 
   async function runPasteWorker() {
     if (pasteWorkerRunning) return;
     pasteWorkerRunning = true;
+    updatePasteStatusIndicator();
     try {
       while (pasteQueue.length > 0) {
         const { text, target } = pasteQueue.shift();
+        updatePasteStatusIndicator();
         await processOnePaste(text, target);
       }
     } finally {
       pasteWorkerRunning = false;
+      updatePasteStatusIndicator();
     }
   }
 

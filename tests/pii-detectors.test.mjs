@@ -6,6 +6,7 @@
 
 import assert from 'node:assert/strict';
 import {
+  createContextAwareReplacement,
   createFallbackReplacement,
   detectDeterministicPII,
 } from '../pii-detectors.js';
@@ -80,6 +81,45 @@ test('detects simple date formats', () => {
 test('deduplicates repeated originals', () => {
   const entities = detectDeterministicPII('a@b.de und a@b.de');
   assert.equal(entities.length, 1);
+});
+
+section('context-aware replacements');
+
+test('keeps phone country code when present', () => {
+  const replacement = createFallbackReplacement('+49 170 1234567', 'phone');
+  assert.match(replacement, /^\+49/);
+});
+
+test('keeps female honorifics and returns a plausible female name', () => {
+  const replacement = createFallbackReplacement('Frau Anna Schmidt', 'name');
+  assert.match(
+    replacement,
+    /^Frau (Anna|Sophie|Lena|Lea|Julia|Clara|Emma|Laura|Marie|Hanna) [A-ZÄÖÜ][\p{L}-]+$/u
+  );
+});
+
+test('keeps addresses in Germany when the original is in Germany', () => {
+  const replacement = createFallbackReplacement(
+    'Musterstraße 12, 10115 Berlin, Deutschland',
+    'address'
+  );
+  assert.match(replacement, /Deutschland/);
+  assert.doesNotMatch(replacement, /Austria|Österreich|USA|United Kingdom|Schweiz/);
+});
+
+test('keeps the company legal suffix', () => {
+  const replacement = createFallbackReplacement('Beispiel Holding GmbH', 'company');
+  assert.match(replacement, /\bGmbH$/);
+});
+
+test('keeps passport-like formats readable', () => {
+  const replacement = createFallbackReplacement('C01X00T47', 'passport');
+  assert.match(replacement, /^[A-Z]\d{2}[A-Z]\d{2}[A-Z]\d{2}$/);
+});
+
+test('uses a provided suggestion only for uncategorized other-values', () => {
+  const replacement = createContextAwareReplacement('Projekt Adler', 'other', 'Projekt Nova');
+  assert.equal(replacement, 'Projekt Nova');
 });
 
 // ─── Summary ────────────────────────────────────────────────────────────────

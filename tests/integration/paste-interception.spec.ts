@@ -81,11 +81,14 @@ for (const bot of CHATBOTS) {
       await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
 
       await syntheticPaste(page, bot.selector, PII_TEXT);
+      const pasteStatus = page.locator('#pii-shield-paste-status');
+      await expect(pasteStatus).toHaveClass(/pii-shield-paste-status-visible/, { timeout: 5_000 });
 
       // Banner erscheint mit Anonymisierungshinweis
       const banner = page.locator('#pii-shield-banner');
       await expect(banner).toHaveClass(/pii-shield-banner-visible/, { timeout: 5_000 });
       await expect(banner).toContainText('PII-Element');
+      await expect(pasteStatus).not.toHaveClass(/pii-shield-paste-status-visible/, { timeout: 5_000 });
 
       // Editor enthält den Fake-Namen, nicht das Original
       const text = await editorText(page, bot.selector);
@@ -101,14 +104,16 @@ for (const bot of CHATBOTS) {
       await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
 
       await syntheticPaste(page, bot.selector, SAFE_TEXT);
+      const pasteStatus = page.locator('#pii-shield-paste-status');
+      await expect(pasteStatus).toHaveClass(/pii-shield-paste-status-visible/, { timeout: 5_000 });
+      await expect
+        .poll(async () => editorText(page, bot.selector), { timeout: 5_000 })
+        .toContain(SAFE_TEXT.slice(0, 20));
+      await expect(pasteStatus).not.toHaveClass(/pii-shield-paste-status-visible/, { timeout: 5_000 });
 
       // Kein Banner
       const banner = page.locator('#pii-shield-banner');
       await expect(banner).not.toHaveClass(/pii-shield-banner-visible/);
-
-      // Originaltext ist im Editor
-      const text = await editorText(page, bot.selector);
-      expect(text).toContain(SAFE_TEXT.slice(0, 20)); // erste 20 Zeichen reichen
 
       await page.close();
     });

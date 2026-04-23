@@ -7,6 +7,7 @@
 
 import { applyReplacements, buildReplacementEntries } from './replacement-engine.js';
 import {
+  createContextAwareReplacement,
   createFallbackReplacement,
   detectDeterministicPII,
   isKnownCategory,
@@ -93,6 +94,13 @@ For each PII entity, return:
 - replacement: a realistic but fake value that preserves the broad format
 - category: one of the allowed schema categories
 - confidence: optional number between 0 and 1
+
+Keep replacements semantically coherent so they do not feel jarring:
+- names: keep the same apparent gender, honorific, number of parts, and cultural context when obvious
+- addresses: stay in the same country and keep the same postal/address style
+- companies: keep the same legal form when obvious (for example GmbH, AG, LLC, Ltd)
+- phone numbers: keep the same country calling code when present
+- IDs and record numbers: keep the same broad pattern and length
 
 Do not include generic terms, common nouns, code, or non-identifying text.`;
 
@@ -444,15 +452,20 @@ function normalizeEntity(entity, text, source) {
   if (!entity || typeof entity !== 'object') return null;
 
   const original = String(entity.original || '').trim();
-  const replacement = String(entity.replacement || '').trim();
-  if (!original || !replacement || original === replacement) return null;
-  if (replacement.includes(original)) return null;
+  if (!original) return null;
 
   const start = text.indexOf(original);
   if (start === -1) return null;
 
   const category = isKnownCategory(entity.category) ? entity.category : 'other';
   const confidence = Number.isFinite(entity.confidence) ? entity.confidence : undefined;
+  const replacement = createContextAwareReplacement(
+    original,
+    category,
+    String(entity.replacement || '').trim()
+  );
+  if (!replacement || original === replacement) return null;
+  if (replacement.includes(original)) return null;
 
   return {
     original,
@@ -470,16 +483,23 @@ function ensureUniqueReplacements(entities) {
 
   return entities.map(entity => {
     let replacement = entity.replacement;
-
-    if (used.has(replacement) && used.get(replacement) !== entity.original) {
-      replacement = createFallbackReplacement(entity.original, entity.category);
-    }
-
-    let counter = 2;
-    const baseReplacement = replacement;
+    let variant = 0;
     while (used.has(replacement) && used.get(replacement) !== entity.original) {
-      replacement = `${baseReplacement}-${counter}`;
-      counter++;
+      variant++;
+      replacement = createContextAwareReplacement(
+        entity.original,
+        entity.category,
+        entity.replacement,
+        { variant }
+      );
+
+      if (!replacement || replacement === entity.original || replacement.includes(entity.original)) {
+        replacement = createFallbackReplacement(entity.original, entity.category, { variant });
+      }
+
+      if (variant > 8 && used.has(replacement) && used.get(replacement) !== entity.original) {
+        replacement = `${replacement} ${variant + 1}`;
+      }
     }
 
     used.set(replacement, entity.original);

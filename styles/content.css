@@ -103,6 +103,82 @@
   background: linear-gradient(135deg, #1a1a2e 0%, #1a0d3e 100%);
 }
 
+/* Paste Loading Indicator */
+.pii-shield-paste-status {
+  position: fixed;
+  right: 20px;
+  bottom: 72px;
+  z-index: 2147483646;
+  min-width: 300px;
+  max-width: min(380px, calc(100vw - 32px));
+  border: 1px solid rgba(100, 181, 246, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(15, 24, 47, 0.96), rgba(12, 42, 78, 0.96));
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+  color: #dfe8ff;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  pointer-events: none;
+}
+
+.pii-shield-paste-status-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.pii-shield-paste-status-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.pii-shield-paste-status-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #64b5f6;
+  flex-shrink: 0;
+  animation: pii-shield-spin 0.85s linear infinite;
+}
+
+.pii-shield-paste-status-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pii-shield-paste-status-text strong {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.pii-shield-paste-status-text span {
+  color: #bfd0f1;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pii-shield-paste-status-count {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(100, 181, 246, 0.14);
+  color: #90caf9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 /* ─── Floating Badge ─────────────────────────────────────────────────────── */
 
 .pii-shield-badge {
@@ -131,6 +207,10 @@
   border-color: rgba(100, 181, 246, 0.6);
 }
 
+.pii-shield-badge-busy {
+  animation: pii-shield-badge-pulse 1.4s ease-in-out infinite;
+}
+
 .pii-shield-badge-disabled {
   background: linear-gradient(135deg, #424242, #616161);
   border-color: rgba(255, 255, 255, 0.1);
@@ -140,4 +220,34 @@
 .pii-shield-badge-disabled:hover {
   opacity: 0.9;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes pii-shield-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pii-shield-badge-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 8px 28px rgba(100, 181, 246, 0.35);
+  }
+}
+
+@media (max-width: 640px) {
+  .pii-shield-banner {
+    min-width: auto;
+    max-width: calc(100vw - 24px);
+  }
+
+  .pii-shield-paste-status {
+    left: 12px;
+    right: 12px;
+    bottom: 72px;
+    min-width: 0;
+    max-width: none;
+  }
 }

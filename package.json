@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
-    "test:unit": "node tests/replacement-engine.test.mjs",
+    "test:unit": "node tests/replacement-engine.test.mjs && node tests/pii-detectors.test.mjs",
     "test:all": "npm run test:unit && npm run test",
     "serve:fixtures": "npx serve tests/fixtures -p 3000 --no-clipboard"
   },
