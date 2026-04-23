@@ -143,6 +143,16 @@ profiles, the required Chrome flags may need to be enabled manually:
    Model** is available. Use **Check for update** if Chrome has not downloaded
    the local model yet.
 
+## Chrome Web Store Package
+
+Store-ready ZIP packages are attached to
+[GitHub Releases](https://github.com/kaispriestersbach/pii-shield-extension/releases).
+For the current release, download
+[`pii-shield-extension-v1.1.1-chrome-store.zip`](https://github.com/kaispriestersbach/pii-shield-extension/releases/download/v1.1.1/pii-shield-extension-v1.1.1-chrome-store.zip)
+from
+[PII Shield v1.1.1](https://github.com/kaispriestersbach/pii-shield-extension/releases/tag/v1.1.1)
+and upload that ZIP in the Chrome Web Store Developer Dashboard.
+
 ## Installation From Source
 
 ```bash
