@@ -9,11 +9,10 @@
     "unlimitedStorage"
   ],
   "optional_host_permissions": [
-    "https://huggingface.co/*",
     "https://*.hf.co/*"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "http://localhost:3000/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -21,7 +20,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["http://localhost:3000/*"],
       "js": ["i18n.js", "content.js"],
       "css": ["styles/content.css"],
       "run_at": "document_start"

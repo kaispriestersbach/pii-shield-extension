@@ -170,8 +170,8 @@ generated and intentionally ignored by Git.
 4. Keep **Reversible** selected if copied responses should restore original
    values.
 5. Switch to **Simple** if one-way placeholder masking is preferred. On first
-   use, Chrome asks for one-time Hugging Face download permission so the Privacy
-   Filter model can be cached locally.
+   use, Chrome asks for one-time access to the Hugging Face model file host so
+   the Privacy Filter model can be cached locally.
 
 ## Privacy And Security Model
 
@@ -181,9 +181,11 @@ PII Shield is built around a local-first privacy model:
 - **No telemetry:** the codebase contains no analytics, tracking, or usage
   reporting.
 - **Local analysis:** prompt text is analyzed in the browser by local runtimes.
-- **Controlled Simple Mode download:** Simple Mode requests optional host
-  permission for `https://huggingface.co/*` and `https://*.hf.co/*` only to
-  download the `openai/privacy-filter` model files.
+- **Controlled Simple Mode download:** `https://huggingface.co/chat/*` is a
+  required host because Hugging Face Chat is a supported site. Simple Mode only
+  requests additional optional host permission for `https://*.hf.co/*` to allow
+  Hugging Face model file delivery when the `openai/privacy-filter` model is
+  downloaded.
 - **Session-scoped reversible mappings:** fake-to-original mappings are kept in
   `chrome.storage.session`, isolated by tab, and cleared automatically.
 - **Host-scoped execution:** content scripts run only on supported chatbot

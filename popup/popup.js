@@ -47,8 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentMode = 'reversible';
   let aiStatusPoll = null;
   let simpleStatusPoll = null;
-  const simpleModelDownloadOrigins = [
-    'https://huggingface.co/*',
+  const simpleModelOptionalDownloadOrigins = [
     'https://*.hf.co/*',
   ];
 
@@ -80,7 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!chrome.permissions?.request) return false;
 
     try {
-      return await chrome.permissions.request({ origins: simpleModelDownloadOrigins });
+      return await chrome.permissions.request({ origins: simpleModelOptionalDownloadOrigins });
     } catch {
       return false;
     }

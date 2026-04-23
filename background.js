@@ -73,8 +73,7 @@ const SIMPLE_MODEL_ID = 'openai/privacy-filter';
 const SIMPLE_MODEL_REVISION = '7ffa9a043d54d1be65afb281eddf0ffbe629385b';
 const SIMPLE_MODEL_SOURCE = 'huggingface';
 const SIMPLE_MODEL_CACHE_NAME = 'transformers-cache';
-const SIMPLE_MODEL_DOWNLOAD_ORIGINS = [
-  'https://huggingface.co/*',
+const SIMPLE_MODEL_OPTIONAL_DOWNLOAD_ORIGINS = [
   'https://*.hf.co/*',
 ];
 const SIMPLE_MODEL_REMOTE_FILES = [
@@ -625,7 +624,7 @@ async function hasSimpleModelDownloadPermission() {
   if (!chrome.permissions?.contains) return true;
 
   try {
-    return await chrome.permissions.contains({ origins: SIMPLE_MODEL_DOWNLOAD_ORIGINS });
+    return await chrome.permissions.contains({ origins: SIMPLE_MODEL_OPTIONAL_DOWNLOAD_ORIGINS });
   } catch {
     return false;
   }
@@ -635,7 +634,7 @@ async function requestSimpleModelDownloadPermission() {
   if (!chrome.permissions?.request) return true;
 
   try {
-    return await chrome.permissions.request({ origins: SIMPLE_MODEL_DOWNLOAD_ORIGINS });
+    return await chrome.permissions.request({ origins: SIMPLE_MODEL_OPTIONAL_DOWNLOAD_ORIGINS });
   } catch {
     return false;
   }
