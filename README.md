@@ -1,255 +1,206 @@
-# PII Shield – AI Privacy Guard
+# PII Shield - AI Privacy Guard
 
-**Autor der Software: Kai Spriestersbach**
+**Software author: Kai Spriestersbach**
 
-**Chrome Extension zum automatischen Schutz personenbezogener Daten (PII) bei der Nutzung von KI-Chatbots.**
+PII Shield is a Chrome extension that helps protect personally identifiable
+information (PII) before text is pasted into AI chatbots. It runs in the
+browser and supports two operating modes.
 
-PII Shield erkennt personenbezogene Daten in der Zwischenablage, bevor sie in einen KI-Chatbot eingefügt werden. Die Verarbeitung findet lokal im Browser statt und bietet jetzt zwei Betriebsarten:
+- **Reversible Mode:** replaces PII with plausible fake values when pasting and
+  restores known fake values to the originals when copying answers back out.
+- **Simple Mode:** masks PII with typed placeholders such as `<PRIVATE_EMAIL>`
+  or `<PRIVATE_PERSON>` using OpenAI Privacy Filter locally in the browser. The
+  model is downloaded once from Hugging Face, cached by the extension, and then
+  executed locally over WebGPU.
 
-- **Reversible Mode:** ersetzt PII durch realistische, aber fiktive Alternativen und stellt bekannte Fake-Daten beim Kopieren wieder her.
-- **Simple Mode:** maskiert erkannte PII mit typisierten Platzhaltern wie `<PRIVATE_EMAIL>` oder `<PRIVATE_PERSON>` auf Basis des lokal ausgeführten OpenAI Privacy Filter Modells. Beim ersten Umschalten wird das Modell von Hugging Face heruntergeladen und im Browser-Cache der Extension gespeichert. Es gibt in diesem Modus keinen Rücktausch beim Kopieren.
-
-Die Erkennung bleibt lokal im Browser – mit Chrome Built-in AI (Gemini Nano), OpenAI Privacy Filter über WebGPU und deterministischen Prüfern für strukturierte Daten. Im Simple Mode werden nur Modell-Dateien heruntergeladen; zu prüfende Texte werden nicht an Hugging Face oder andere Server gesendet.
-
----
-
-## Autorenhinweis
-
-PII Shield wird in dieser Codebasis von **Kai Spriestersbach** als Autor der Software geführt.
-
----
-
-## Betriebsmodi
-
-| Modus | Verhalten beim Einfügen | Verhalten beim Kopieren | Lokale Laufzeit |
-|------|--------------------------|-------------------------|-----------------|
-| **Reversible** | Fake-Daten statt Original-PII | Bekannte Fake-Daten werden lokal zurückgetauscht | Gemini Nano + deterministische Prüfer |
-| **Simple** | Typisierte Platzhalter statt Original-PII | Kein Rücktausch | OpenAI Privacy Filter + deterministische Prüfer |
+Text being checked is not sent to Hugging Face or any other server. In Simple
+Mode, only model files are downloaded.
 
 ---
 
-## Funktionsweise
+## Internationalization
 
-Der Workflow von PII Shield lässt sich in drei Schritte unterteilen, die vollständig automatisch ablaufen:
+The extension UI uses Chrome's native `chrome.i18n` system. English is the
+default locale and fallback for unsupported browser languages. The explicitly
+supported UI locales are:
 
-| Schritt | Aktion | Beschreibung |
-|---------|--------|--------------|
-| **1. Einfügen** | `Ctrl+V` in den Chatbot | PII Shield fängt das Paste-Event ab, analysiert den Text lokal und ersetzt erkannte PII durch plausible Fake-Daten. Bei Analysefehlern wird das Einfügen blockiert. |
-| **2. Verarbeitung** | Chatbot arbeitet | Bei erfolgreicher Analyse erhält der Chatbot den anonymisierten Text. Originalwerte werden nicht in die DOM der Chatbot-Seite geschrieben. |
-| **3. Kopieren** | Antwort markieren und kopieren | PII Shield ersetzt bekannte Fake-Daten synchron im Copy-Event durch die lokal gespeicherten Originalwerte. |
+| Locale | Language |
+|--------|----------|
+| `en` | English |
+| `de` | German |
+| `fr` | French |
+| `es` | Spanish |
+| `it` | Italian |
+| `nl` | Dutch |
 
-### Beispiel
+These languages are also tracked in code as benchmark-backed Privacy Filter
+languages. English, German, French, Spanish, Italian, and Dutch are separately
+reported in the multilingual PII-Masking-300k benchmark. This is not a guarantee
+of equal quality for every region, writing style, or PII type; users should
+expect model performance to vary outside the training and evaluation
+distribution.
 
-**Originaler Text (in der Zwischenablage):**
-> Bitte erstelle eine E-Mail an Max Mustermann (max.mustermann@firma.de, Tel: +49 170 1234567) bezüglich des Vertrags für die Musterstraße 42, 10115 Berlin.
-
-**Anonymisierter Text (wird in den Chatbot eingefügt):**
-> Bitte erstelle eine E-Mail an Thomas Weber (t.weber@example.com, Tel: +49 151 9876543) bezüglich des Vertrags für die Lindenallee 7, 80331 München.
-
-**Chatbot-Antwort (kopiert):**
-> Sehr geehrter Herr Weber, bezüglich des Vertrags für die Lindenallee 7...
-
-**Wiederhergestellter Text (in der Zwischenablage):**
-> Sehr geehrter Herr Mustermann, bezüglich des Vertrags für die Musterstraße 42...
-
----
-
-## Erkannte PII-Kategorien
-
-PII Shield erkennt und anonymisiert die folgenden Kategorien personenbezogener Daten:
-
-| Kategorie | Beispiele |
-|-----------|-----------|
-| **Namen** | Vor- und Nachnamen, vollständige Namen |
-| **E-Mail-Adressen** | max.mustermann@firma.de |
-| **Telefonnummern** | +49 170 1234567, 030/12345678 |
-| **Physische Adressen** | Straße, PLZ, Stadt, Land |
-| **Geburtsdaten** | 15.03.1985 |
-| **Sozialversicherungsnummern** | Nationale ID-Nummern |
-| **Kreditkartennummern** | VISA, Mastercard etc. |
-| **IBAN / Bankdaten** | DE89 3704 0044 0532 0130 00 |
-| **IP-Adressen** | 192.168.1.100 |
-| **Firmennamen** | Wenn sie eine spezifische reale Firma identifizieren |
-
-Die Erkennung kombiniert Gemini Nano mit deterministischen Prüfern für strukturierte PII wie E-Mail, IBAN, Kreditkarten, Telefonnummern, IP-Adressen und Datumswerte. Die KI-Erkennung bleibt probabilistisch; die deterministischen Prüfer decken nur klar strukturierte Kategorien ab.
+Sources: [OpenAI Privacy Filter on Hugging Face](https://huggingface.co/openai/privacy-filter)
+and the [OpenAI Privacy Filter Model Card](https://cdn.openai.com/pdf/c66281ed-b638-456a-8ce1-97e9f5264a90/OpenAI-Privacy-Filter-Model-Card.pdf).
 
 ---
 
-## Sprachabdeckung & Internationalisierung
+## Modes
 
-OpenAI Privacy Filter ist nach OpenAIs Model Card **nicht nur englisch**, aber **primär für Englisch ausgewiesen**. OpenAI beschreibt die Modellsprachen als “Primarily English” mit ausgewählten mehrsprachigen Robustheits-Evaluationen. Für die Internationalisierung von PII Shield bedeutet das:
-
-- **Gut dokumentierte Benchmark-Sprachen:** Englisch, Deutsch, Französisch, Spanisch, Italienisch und Niederländisch sind im mehrsprachigen PII-Masking-300k-Benchmark separat ausgewiesen; Deutsch liegt dort nahe an Englisch.
-- **Zusätzlich synthetisch evaluiert:** Bengali, Hausa, Hindi, Indonesisch, Japanisch, Koreanisch, Mandarin-Chinesisch, Modern Standard Arabic, Portugiesisch, Russisch, Türkisch, Urdu und Western Punjabi wurden in erweiterten synthetischen multilingualen Tests berichtet.
-- **Produktentscheidung:** Die UI kann internationalisiert werden, aber die Erkennungsqualität sollte pro Zielsprache mit lokalen Testtexten validiert werden. Für Deutsch ist der Simple Mode plausibel, sollte aber nicht als identisch zuverlässig zu englischem Text beworben werden.
-- **Wichtige Einschränkung:** OpenAI warnt vor Leistungsabfall bei nicht-englischem Text, nicht-lateinischen Schriften, regionalen Namensmustern und Domains außerhalb der Trainingsverteilung.
-
-Quellen: [OpenAI Privacy Filter auf Hugging Face](https://huggingface.co/openai/privacy-filter) und [OpenAI Privacy Filter Model Card](https://cdn.openai.com/pdf/c66281ed-b638-456a-8ce1-97e9f5264a90/OpenAI-Privacy-Filter-Model-Card.pdf).
+| Mode | Paste behavior | Copy behavior | Local runtime |
+|------|----------------|---------------|---------------|
+| **Reversible** | Fake values replace original PII | Known fake values are restored locally | Gemini Nano + deterministic detectors |
+| **Simple** | Typed placeholders replace original PII | No reverse mapping | OpenAI Privacy Filter + deterministic detectors |
 
 ---
 
-## Unterstützte Plattformen
+## How It Works
 
-PII Shield ist auf 14 KI-Chatbot- und KI-Such-Plattformen aktiv:
+1. **Paste:** the content script intercepts paste events before the chatbot app
+   receives the text.
+2. **Analyze:** the service worker runs local PII detection through Gemini Nano
+   or OpenAI Privacy Filter, plus deterministic detectors for structured data.
+3. **Transform:** detected PII is replaced or masked before insertion.
+4. **Copy:** in Reversible Mode only, known fake values are synchronously
+   restored during copy events using tab-local mappings.
 
-### Chatbots
+Example:
 
-| Plattform | Anbieter | Domain |
-|-----------|----------|--------|
-| **ChatGPT** | OpenAI | `chatgpt.com`, `chat.openai.com` |
-| **Claude** | Anthropic | `claude.ai` |
-| **Gemini** | Google | `gemini.google.com` |
-| **Copilot** | Microsoft | `copilot.microsoft.com` |
-| **Mistral / Le Chat** | Mistral | `chat.mistral.ai` |
-| **DeepSeek** | DeepSeek | `chat.deepseek.com` |
-| **Grok** | xAI | `grok.com` |
-| **Meta AI** | Meta | `www.meta.ai` |
-| **Poe** | Quora | `poe.com` |
-| **HuggingFace Chat** | HuggingFace | `huggingface.co/chat` |
-| **Qwen Chat** | Alibaba | `chat.qwen.ai` |
+Original clipboard text:
 
-### KI-Suchmaschinen
+> Please draft an email to Max Mustermann (max.mustermann@example.com, phone
+> +49 170 1234567) about the contract for Musterstrasse 42, 10115 Berlin.
 
-| Plattform | Fokus | Domain |
-|-----------|-------|--------|
-| **Perplexity** | KI-Suche, Recherche | `www.perplexity.ai` |
-| **You.com** | KI-Suche | `you.com` |
-| **Phind** | KI-Suche für Entwickler | `www.phind.com` |
+Text inserted into the chatbot in Reversible Mode:
+
+> Please draft an email to Thomas Weber (t.weber@example.com, phone
+> +49 151 9876543) about the contract for Lindenallee 7, 80331 Munich.
+
+---
+
+## Detected PII Categories
+
+PII Shield combines model-based detection with deterministic validators for
+high-signal structured data.
+
+| Category | Examples |
+|----------|----------|
+| Names | First and last names, full names |
+| Email addresses | `max.mustermann@example.com` |
+| Phone numbers | `+49 170 1234567`, `030/12345678` |
+| Physical addresses | Street, postal code, city, country |
+| Dates | `1985-03-15`, `15.03.1985` |
+| National IDs | Country-specific ID numbers |
+| Credit card numbers | Visa, Mastercard, and similar card numbers |
+| IBAN / bank data | `DE89 3704 0044 0532 0130 00` |
+| IP addresses | `192.168.1.100` |
+| Company names | Specific company identifiers and legal suffixes |
+
+Model detection remains probabilistic. Deterministic detectors improve coverage
+for structured categories but do not replace a full privacy review.
+
+---
+
+## Supported Platforms
+
+PII Shield is active on these chatbot and AI-search domains:
+
+| Platform | Domain |
+|----------|--------|
+| ChatGPT | `chatgpt.com`, `chat.openai.com` |
+| Claude | `claude.ai` |
+| Gemini | `gemini.google.com` |
+| Copilot | `copilot.microsoft.com` |
+| Mistral / Le Chat | `chat.mistral.ai` |
+| DeepSeek | `chat.deepseek.com` |
+| Grok | `grok.com` |
+| Meta AI | `www.meta.ai` |
+| Poe | `poe.com` |
+| Hugging Face Chat | `huggingface.co/chat` |
+| Qwen Chat | `chat.qwen.ai` |
+| Perplexity | `www.perplexity.ai` |
+| You.com | `you.com` |
+| Phind | `www.phind.com` |
 
 ---
 
 ## Installation
 
-### Voraussetzungen
+### Requirements
 
-PII Shield benötigt Chrome 138 oder neuer mit aktiviertem Gemini Nano. Die folgenden Chrome-Flags müssen aktiviert sein:
+PII Shield requires Chrome 138 or newer with Gemini Nano support for Reversible
+Mode.
 
-1. Öffne `chrome://flags/#optimization-guide-on-device-model` und setze den Wert auf **Enabled BypassPerfRequirement**.
-2. Öffne `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` und setze den Wert auf **Enabled**.
-3. Starte Chrome neu.
-4. Öffne `chrome://components/` und prüfe, ob **Optimization Guide On Device Model** vorhanden ist. Klicke ggf. auf **Nach Updates suchen**, um das Modell herunterzuladen.
+1. Open `chrome://flags/#optimization-guide-on-device-model` and set it to
+   **Enabled BypassPerfRequirement**.
+2. Open `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` and set it
+   to **Enabled**.
+3. Restart Chrome.
+4. Open `chrome://components/` and check whether **Optimization Guide On Device
+   Model** is available. Use **Check for update** if needed.
 
-### Simple Mode Modell
+Simple Mode additionally requires WebGPU and enough browser-cache storage for
+the OpenAI Privacy Filter model.
 
-Der Simple Mode benötigt zusätzlich das OpenAI Privacy Filter Modell. Nutzer müssen dafür kein npm ausführen:
+### Load the Extension
 
-1. Klicke im Popup auf **Simple**.
-2. Bestätige die einmalige Download-Berechtigung für Hugging Face.
-3. Warte, bis das q4-Modell heruntergeladen, lokal gecached und über WebGPU initialisiert wurde.
-
-Danach wird das Modell aus dem Browser-Cache der Extension geladen. Nur Modell-Dateien kommen von Hugging Face; Clipboard-Texte bleiben lokal.
-
-### Hardware-Anforderungen
-
-| Anforderung | Minimum |
-|-------------|---------|
-| **Betriebssystem** | Windows 10/11, macOS 13+, Linux, ChromeOS |
-| **Speicherplatz** | 22 GB frei im Chrome-Profil-Verzeichnis für Gemini Nano; zusätzlich ca. 1 GB für den Simple-Mode-Modellcache |
-| **GPU** | > 4 GB VRAM |
-| **CPU (ohne GPU)** | 16 GB RAM, 4+ Kerne |
-
-### Extension laden
-
-1. Öffne `chrome://extensions/` in Chrome.
-2. Aktiviere den **Entwicklermodus** (oben rechts).
-3. Klicke auf **Entpackte Erweiterung laden**.
-4. Wähle den Ordner `pii-shield-extension` aus.
-5. Die Extension erscheint in der Toolbar mit dem Schild-Icon.
+1. Open `chrome://extensions/`.
+2. Enable **Developer mode**.
+3. Select **Load unpacked**.
+4. Choose the `pii-shield-extension` folder.
+5. The extension appears in the toolbar.
 
 ---
 
-## Architektur
+## Privacy And Security
 
-PII Shield besteht aus vier Hauptkomponenten:
+- **Local analysis:** text analysis runs in the browser.
+- **Controlled model download:** Simple Mode downloads only model files from
+  `openai/privacy-filter` on Hugging Face and caches them locally.
+- **No backend:** there is no external server, telemetry, or tracking.
+- **Minimal permissions:** runtime host permissions are limited to supported
+  chatbot sites; Hugging Face access is requested only when Simple Mode needs to
+  download the model.
+- **No PII in host DOM:** banners show status and counts, not original values or
+  mapping details.
+- **Tab-local mappings:** mappings are stored in `chrome.storage.session`, are
+  isolated by tab, and are cleared on tab close, navigation, explicit clear, and
+  inactivity TTL.
 
-### 1. Content Script (`content.js`)
+---
 
-Das Content Script wird in die unterstützten Chatbot-Seiten injiziert und übernimmt zwei zentrale Aufgaben:
+## Development
 
-**Paste-Interception:** Das Script fängt das `paste`-Event in der Capture-Phase ab, bevor die Chatbot-Anwendung den Text verarbeitet. Der Text wird an den Service Worker zur PII-Analyse gesendet. Wird PII erkannt, wird der anonymisierte Text eingefügt; wenn die Analyse fehlschlägt, wird nichts eingefügt.
-
-**Copy-Interception:** Beim Kopieren von Text aus der Chatbot-Antwort prüft das Script mit einer lokalen Mapping-Kopie synchron, ob der kopierte Text bekannte Fake-Daten enthält. Falls ja, wird die Zwischenablage während desselben Copy-Events mit den wiederhergestellten Originaldaten beschrieben.
-
-Zusätzlich zeigt das Content Script datensparsame Benachrichtigungen (Banner) an und stellt ein schwebendes Badge-Icon bereit, über das die Extension schnell aktiviert oder deaktiviert werden kann. Der Banner enthält keine Original-PII und keine Mapping-Details.
-
-### 2. Service Worker (`background.js`)
-
-Der Service Worker ist das Herzstück der PII-Erkennung. Er orchestriert sowohl den reversiblen Gemini-Nano-Flow über die Chrome Prompt API (`LanguageModel.create()`) als auch den Simple Mode mit lokal ausgeführtem OpenAI Privacy Filter. Beim ersten Simple-Mode-Start fordert er die optionale Download-Berechtigung an, startet den Modell-Download und verfolgt Download-/Cache-/Ready-Status. Zusätzlich laufen deterministische Fallback-Detektoren für strukturierte PII.
-
-Das Mapping wird pro Tab gespeichert (`Map<tabId, Map<fake, original>>`), sodass mehrere Tabs unabhängig voneinander arbeiten können. Die Werte liegen in `chrome.storage.session`, werden bei Tab-Schließung, Navigation, explizitem Löschen und nach Inaktivität bereinigt und nicht in `chrome.storage.local` persistiert.
-
-### 3. Offscreen Runtime (`offscreen/`)
-
-Die Offscreen-Runtime hält das OpenAI Privacy Filter Modell für den Simple Mode am Leben. Die Runtime-Dateien `transformers.web.js` und ONNX-WASM sind gebundelte Extension-Dateien. Die Modellgewichte und Konfigurationen werden kontrolliert von `openai/privacy-filter` auf Hugging Face geladen, durch Transformers.js im Browser-Cache gespeichert und danach lokal über WebGPU genutzt.
-
-### 4. Popup (`popup/`)
-
-Das Popup bietet eine Übersicht über den aktuellen Status der Extension, den aktiven Modus, die Verfügbarkeit von Gemini Nano, den Status des lokalen Privacy Filter Modells und die aktiven Ersetzungen für den aktuellen Tab. Über einen Toggle kann die Extension aktiviert oder deaktiviert werden. Im Simple Mode wird statt der Mapping-Tabelle ein Hinweis angezeigt, dass es keine Rückzuordnung gibt.
-
-### Datenfluss-Diagramm
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                        Browser Tab                           │
-│                                                              │
-│  ┌─────────┐   paste    ┌──────────────┐   anonymized text  │
-│  │ Clipboard├──────────►│ Content Script├──────────────────► │
-│  │ (Ctrl+V) │           │  (content.js) │    ┌───────────┐  │
-│  └─────────┘            └──────┬────────┘    │  Chatbot   │  │
-│                                │             │  Input     │  │
-│                    sendMessage │             └───────────┘  │
-│                                ▼                             │
-│                    ┌───────────────────┐                     │
-│                    │  Service Worker   │                     │
-│                    │  (background.js)  │                     │
-│                    │                   │                     │
-│                    │  ┌─────────────┐  │                     │
-│                    │  │ Gemini Nano │  │                     │
-│                    │  │ (Prompt API)│  │                     │
-│                    │  └─────────────┘  │                     │
-│                    │                   │                     │
-│                    │  ┌─────────────┐  │                     │
-│                    │  │  Mapping    │  │                     │
-│                    │  │  Storage    │  │                     │
-│                    │  └─────────────┘  │                     │
-│                    └───────────────────┘                     │
-│                                ▲                             │
-│                    sendMessage │                              │
-│                                │                             │
-│  ┌─────────┐    copy    ┌──────┴────────┐   de-anonymized   │
-│  │ Clipboard│◄──────────┤ Content Script├◄──────────────── │
-│  │ (Ctrl+C) │           │  (content.js) │    ┌───────────┐  │
-│  └─────────┘            └───────────────┘    │  Chatbot   │  │
-│                                              │  Response  │  │
-│                                              └───────────┘  │
-└──────────────────────────────────────────────────────────────┘
+```bash
+npm install
+npm run build
+npm run test:unit
+npm run test
 ```
 
----
+Important runtime files:
 
-## Datenschutz & Sicherheit
-
-PII Shield wurde mit einem strikten Privacy-by-Design-Ansatz entwickelt:
-
-- **Keine PII-Datenübertragung:** Alle PII-Analysen finden lokal im Browser statt. Gemini Nano läuft on-device; Privacy Filter läuft nach dem Download lokal über WebGPU.
-- **Kontrollierter Modell-Download:** Im Simple Mode lädt die Extension ausschließlich Modell-Dateien von Hugging Face (`openai/privacy-filter`) und cached sie lokal. Es gibt kein Backend, keine Telemetrie, kein Tracking.
-- **Minimale Berechtigungen:** Die Extension benötigt `storage`, `unlimitedStorage`, `offscreen`, Host-Permissions für die unterstützten Chatbot-Seiten sowie optionale Hugging-Face-Download-Permissions für den Simple Mode. Clipboard-Zugriffe erfolgen über echte Paste-/Copy-Events.
-- **Keine PII in der Host-DOM:** Content-Banner zeigen nur Statusmeldungen und Zähler, keine Originalwerte oder Mapping-Tabellen.
-- **Tab-isolierte Mappings:** Jeder Tab hat sein eigenes Mapping. Bei Tab-Schließung, Navigation, Clear-Aktion oder Inaktivität werden die Daten gelöscht.
+- `background.js`: service worker orchestration, mode state, model download,
+  cache checks, and tab-local mappings.
+- `content.js`: paste/copy interception, page-level notifications, and badge UI.
+- `popup/`: extension popup UI and model status controls.
+- `offscreen/`: local OpenAI Privacy Filter runtime.
+- `_locales/`: Chrome i18n message catalogs.
 
 ---
 
-## Einschränkungen
+## Limitations
 
-- **Gemini Nano erforderlich:** Die Extension funktioniert nur in Chrome-Versionen, die die Prompt API unterstützen (Chrome 138+). Das Modell muss heruntergeladen sein.
-- **KI-basierte Erkennung:** Da ein Teil der PII-Erkennung durch ein Sprachmodell erfolgt, kann es zu False Positives (fälschlich erkannte PII) oder False Negatives (übersehene PII) kommen. Die deterministischen Prüfer verbessern strukturierte Kategorien, ersetzen aber keine vollständige Datenschutzprüfung.
-- **Sprachabdeckung:** Privacy Filter ist primär englisch dokumentiert und multilingual evaluiert, aber nicht für alle Sprachen gleich robust. Nicht-lateinische Schriften, regionale Namenskonventionen und domänenspezifische Texte brauchen eigene Akzeptanztests.
-- **Fail-closed:** Wenn Gemini Nano nicht verfügbar ist, das Modell noch lädt, die strukturierte Antwort ungültig ist oder die Analyse timeoutet, wird der Paste-Vorgang blockiert.
-- **Textbasiert:** Aktuell werden nur Texteinfügungen über die Zwischenablage überwacht. Datei-Uploads werden nicht analysiert.
-- **Latenz:** Die PII-Analyse durch Gemini Nano kann je nach Hardware 1–5 Sekunden dauern. Während dieser Zeit wird das Einfügen blockiert.
+- Gemini Nano availability depends on Chrome version, flags, hardware, and
+  profile state.
+- WebGPU is required for Simple Mode.
+- Model-based detection may produce false positives or false negatives.
+- Unsupported browser UI languages fall back to English.
+- Only text pasted through clipboard events is analyzed; file uploads are not
+  inspected.
 
 ---
 
-## Lizenz
+## License
 
-MIT License – Frei verwendbar, modifizierbar und verteilbar.
+MIT License.

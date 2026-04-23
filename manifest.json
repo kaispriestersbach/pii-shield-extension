@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "PII Shield – AI Privacy Guard",
+  "name": "__MSG_extensionName__",
   "version": "1.1.1",
-  "description": "Automatically detects, anonymizes or masks personally identifiable information (PII) before pasting into AI chatbots. Supports reversible Gemini Nano mode and local Privacy Filter simple mode.",
+  "default_locale": "en",
+  "description": "__MSG_extensionDescription__",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -52,7 +53,7 @@
         "https://you.com/*",
         "https://chat.qwen.ai/*"
       ],
-      "js": ["content.js"],
+      "js": ["i18n.js", "content.js"],
       "css": ["styles/content.css"],
       "run_at": "document_start"
     }

@@ -1,0 +1,377 @@
+{
+  "extensionName": {
+    "message": "PII Shield - AI Privacy Guard"
+  },
+  "extensionDescription": {
+    "message": "Automatically detects, anonymizes, or masks personally identifiable information (PII) before pasting into AI chatbots. Supports reversible Gemini Nano mode and local Privacy Filter simple mode."
+  },
+  "statusActive": {
+    "message": "Active"
+  },
+  "statusDisabled": {
+    "message": "Disabled"
+  },
+  "unknownSite": {
+    "message": "Unknown"
+  },
+  "sectionMode": {
+    "message": "Mode"
+  },
+  "modeReversible": {
+    "message": "Reversible"
+  },
+  "modeSimple": {
+    "message": "Simple"
+  },
+  "modeReversibleLabel": {
+    "message": "Reversible Mode"
+  },
+  "modeSimpleLabel": {
+    "message": "Simple Mode"
+  },
+  "modeHintReversible": {
+    "message": "Reversible replaces PII with fake data when pasting and restores known values from local tab mappings when copying."
+  },
+  "modeHintSimple": {
+    "message": "Simple masks detected PII with typed placeholders and does not perform reverse de-anonymization."
+  },
+  "modeSummaryReversible": {
+    "message": "When pasting, detected PII is replaced with plausible fake data. When copying from the chat, local tab mappings are used to restore original values."
+  },
+  "modeSummarySimple": {
+    "message": "When pasting, detected PII is masked locally with typed placeholders such as <PRIVATE_EMAIL> or <PRIVATE_PERSON>. Copying does not restore originals."
+  },
+  "geminiStatusLabel": {
+    "message": "Gemini Nano (Reversible)"
+  },
+  "aiChecking": {
+    "message": "Checking..."
+  },
+  "modelLoad": {
+    "message": "Load model"
+  },
+  "geminiDownloadTitle": {
+    "message": "Download Gemini Nano"
+  },
+  "aiSessionCreating": {
+    "message": "Creating session..."
+  },
+  "aiDownloadStarting": {
+    "message": "Starting download..."
+  },
+  "loading": {
+    "message": "Loading..."
+  },
+  "ready": {
+    "message": "Ready"
+  },
+  "modelPreparing": {
+    "message": "Preparing model..."
+  },
+  "modelDownloading": {
+    "message": "Model is downloading..."
+  },
+  "modelDownloadingProgress": {
+    "message": "Model is downloading...$PROGRESS$",
+    "placeholders": {
+      "progress": {
+        "content": "$1"
+      }
+    }
+  },
+  "modelNotLoaded": {
+    "message": "Model not loaded yet"
+  },
+  "statusCheckFailed": {
+    "message": "Status check failed"
+  },
+  "errorWithMessage": {
+    "message": "Error: $ERROR$",
+    "placeholders": {
+      "error": {
+        "content": "$1"
+      }
+    }
+  },
+  "promptApiUnavailable": {
+    "message": "Prompt API is not available in this context"
+  },
+  "deviceUnavailable": {
+    "message": "Not available on this device"
+  },
+  "simpleStatusLabel": {
+    "message": "Privacy Filter (Simple)"
+  },
+  "simpleChecking": {
+    "message": "Checking in service worker..."
+  },
+  "simpleInitialDetail": {
+    "message": "Local in the browser, without external services."
+  },
+  "simpleLoadTitle": {
+    "message": "Download and initialize the Privacy Filter model locally"
+  },
+  "simplePermissionMissingValue": {
+    "message": "Download permission missing"
+  },
+  "simplePermissionMissingDetail": {
+    "message": "Enable Simple Mode again and confirm the model download from Hugging Face."
+  },
+  "authorize": {
+    "message": "Authorize"
+  },
+  "simpleModelInitializing": {
+    "message": "Initializing local model..."
+  },
+  "simpleCurrentFile": {
+    "message": "Current file: $FILE$",
+    "placeholders": {
+      "file": {
+        "content": "$1"
+      }
+    }
+  },
+  "simplePreparingWebGPU": {
+    "message": "The offscreen runtime is preparing Privacy Filter over WebGPU."
+  },
+  "simpleReadyDetail": {
+    "message": "Privacy Filter is running locally in the browser over WebGPU."
+  },
+  "notReady": {
+    "message": "Not ready"
+  },
+  "lastError": {
+    "message": "Last error: $ERROR$",
+    "placeholders": {
+      "error": {
+        "content": "$1"
+      }
+    }
+  },
+  "cachedValue": {
+    "message": "In browser cache"
+  },
+  "readyToDownload": {
+    "message": "Ready to download"
+  },
+  "cachedDetail": {
+    "message": "The model is stored locally and only needs to be initialized."
+  },
+  "readyToDownloadDetail": {
+    "message": "On first Simple Mode start, the model is downloaded once from Hugging Face."
+  },
+  "progressPercent": {
+    "message": " ($PERCENT$%)",
+    "placeholders": {
+      "percent": {
+        "content": "$1"
+      }
+    }
+  },
+  "warningStrong": {
+    "message": "Local protection, not a free pass."
+  },
+  "warningText": {
+    "message": "PII Shield reduces risk, but it does not replace manual review for sensitive or regulated data."
+  },
+  "sectionMappings": {
+    "message": "Active replacements"
+  },
+  "clearTab": {
+    "message": "Clear tab"
+  },
+  "clearTabTitle": {
+    "message": "Clear replacements for this tab only"
+  },
+  "clearAll": {
+    "message": "Clear all"
+  },
+  "clearAllTitle": {
+    "message": "Clear replacements for all tabs"
+  },
+  "mappingsEmpty": {
+    "message": "No active replacements for this tab."
+  },
+  "mappingsSimpleHint": {
+    "message": "Simple Mode has no reverse mapping and no tab-local fake/original mappings."
+  },
+  "tableFake": {
+    "message": "Fake (sent)"
+  },
+  "tableOriginal": {
+    "message": "Original (local)"
+  },
+  "sectionWorkflow": {
+    "message": "Active flow"
+  },
+  "sectionSimpleModel": {
+    "message": "Simple Mode model"
+  },
+  "simpleStep1": {
+    "message": "The first switch to Simple Mode asks PII Shield for Hugging Face download permission."
+  },
+  "simpleStep2": {
+    "message": "The q4 Privacy Filter model is downloaded and stored in the extension's browser cache."
+  },
+  "simpleStep3": {
+    "message": "After download, analysis runs locally over WebGPU; your texts are not sent to Hugging Face."
+  },
+  "sectionSupportedSites": {
+    "message": "Supported sites"
+  },
+  "clearAllConfirm": {
+    "message": "Permanently clear all mappings for all tabs?\n\nAfter clearing, copied answers can no longer be restored automatically to the original data."
+  },
+  "errorAiApiMissing": {
+    "message": "The Chrome Prompt API is not available in this extension context."
+  },
+  "errorAiUnavailable": {
+    "message": "Gemini Nano is not available."
+  },
+  "errorAiStatusFailed": {
+    "message": "The Gemini Nano status could not be checked."
+  },
+  "errorAiSessionFailed": {
+    "message": "Gemini Nano could not be started or downloaded."
+  },
+  "errorParseFailed": {
+    "message": "The AI response could not be parsed."
+  },
+  "errorTimeout": {
+    "message": "PII analysis took too long."
+  },
+  "errorDetectionFailed": {
+    "message": "PII analysis failed."
+  },
+  "errorUnknownDetection": {
+    "message": "Unknown error during PII analysis."
+  },
+  "manualSimpleModelMissing": {
+    "message": "The Privacy Filter model has not been downloaded yet. Start Simple Mode in the popup and wait until the local download is complete."
+  },
+  "manualSimplePermissionMissing": {
+    "message": "Simple Mode needs one-time download permission for the Privacy Filter model. Enable Simple Mode in the popup and confirm the permission."
+  },
+  "manualSimpleDownloading": {
+    "message": "The Privacy Filter model is currently downloading or initializing. Wait until Simple Mode is shown as ready."
+  },
+  "manualSimpleDownloadFailed": {
+    "message": "The Privacy Filter model could not be downloaded. Check the connection and try again in the popup."
+  },
+  "manualSimpleQuotaExceeded": {
+    "message": "Chrome could not store the Privacy Filter model locally. Check available disk space and download the model again."
+  },
+  "manualWebGPUUnavailable": {
+    "message": "WebGPU is not available in this browser profile. Simple Mode cannot mask the text locally."
+  },
+  "manualOffscreenUnavailable": {
+    "message": "The local model runtime could not be started."
+  },
+  "manualSimpleInitFailed": {
+    "message": "The local Privacy Filter model could not be loaded."
+  },
+  "manualSimpleAnalysisFailed": {
+    "message": "Simple Mode could not check the text locally right now."
+  },
+  "manualSimpleUnavailable": {
+    "message": "The local Privacy Filter model is not ready right now."
+  },
+  "manualSimpleDefault": {
+    "message": "Simple Mode could not mask the text locally right now."
+  },
+  "badgeInactive": {
+    "message": "PII Shield inactive - click to activate"
+  },
+  "badgeActiveSimple": {
+    "message": "PII Shield active (Simple Mode) - click to deactivate"
+  },
+  "badgeActiveReversible": {
+    "message": "PII Shield active (Reversible Mode) - click to deactivate"
+  },
+  "bannerHintAnonymized": {
+    "message": "Anonymized locally - reverse mapping stays only in this tab."
+  },
+  "bannerHintMasked": {
+    "message": "Masked locally - Simple Mode has no reverse mapping."
+  },
+  "pasteQueuedDetail": {
+    "message": "The current text is being checked locally. $COUNT$ additional paste operation is already waiting.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "pasteQueuedDetailPlural": {
+    "message": "The current text is being checked locally. $COUNT$ additional paste operations are already waiting.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "pasteRunningDetail": {
+    "message": "The text is being checked locally and will be inserted automatically afterward."
+  },
+  "pasteStartsDetail": {
+    "message": "The local check starts immediately."
+  },
+  "pasteStatusTitle": {
+    "message": "PII Shield is checking the paste..."
+  },
+  "manualDialogTitle": {
+    "message": "PII Shield could not mask locally"
+  },
+  "manualCancel": {
+    "message": "Cancel"
+  },
+  "manualInsert": {
+    "message": "Insert unmasked"
+  },
+  "notifyEnabled": {
+    "message": "PII Shield was enabled."
+  },
+  "notifyDisabled": {
+    "message": "PII Shield was disabled."
+  },
+  "notifyOriginalInserted": {
+    "message": "Original text was inserted unmasked at explicit request."
+  },
+  "notifyPasteCanceled": {
+    "message": "Paste canceled."
+  },
+  "notifyPasteBlocked": {
+    "message": "Paste blocked: $ERROR$",
+    "placeholders": {
+      "error": {
+        "content": "$1"
+      }
+    }
+  },
+  "notifyPiiTransformed": {
+    "message": "$COUNT$ PII item(s) detected and $TRANSFORMED$.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "transformed": {
+        "content": "$2"
+      }
+    }
+  },
+  "transformMasked": {
+    "message": "masked"
+  },
+  "transformAnonymized": {
+    "message": "anonymized"
+  },
+  "notifyNoServiceWorkerResponse": {
+    "message": "Paste blocked: no response from the service worker."
+  },
+  "notifyServiceWorkerUnreachable": {
+    "message": "Paste blocked: service worker is unreachable."
+  },
+  "notifyDeanonymized": {
+    "message": "Anonymized data in the answer was restored."
+  }
+}

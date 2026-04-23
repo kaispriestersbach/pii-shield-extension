@@ -18,7 +18,7 @@ async function setMode(context: BrowserContext, extensionId: string, mode: 'reve
     popup.locator(mode === 'simple' ? '#mode-simple' : '#mode-reversible')
   ).toHaveClass(/popup-mode-btn-active/);
   if (mode === 'simple') {
-    await expect(popup.locator('#simple-status-value')).toContainText('Bereit', {
+    await expect(popup.locator('#simple-status-value')).toContainText('Ready', {
       timeout: 5_000,
     });
   }
@@ -138,9 +138,9 @@ test('popup shows simple mode status and hint text', async ({ context, extension
   await popup.locator('#mode-simple').click();
   await expect(popup.locator('#mode-simple')).toHaveClass(/popup-mode-btn-active/);
   await expect(popup.locator('#status-mode')).toContainText('Simple Mode');
-  await expect(popup.locator('#simple-status-value')).toContainText('heruntergeladen');
-  await expect(popup.locator('#simple-status-value')).toContainText('Bereit');
-  await expect(popup.locator('#mode-hint')).toContainText('typisierten Platzhaltern');
+  await expect(popup.locator('#simple-status-value')).toContainText('Model is downloading');
+  await expect(popup.locator('#simple-status-value')).toContainText('Ready');
+  await expect(popup.locator('#mode-hint')).toContainText('typed placeholders');
 
   await popup.close();
 });

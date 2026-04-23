@@ -31,6 +31,8 @@ const CATEGORY_LABELS = new Set([
   'other',
 ]);
 
+export const SUPPORTED_BENCHMARK_LOCALES = ['en', 'de', 'fr', 'es', 'it', 'nl'];
+
 const DIGIT_STREAM = '5117064928351047283946501928374650918273645546372819';
 const UPPER_STREAM = 'QWERTYUPASDFGHJKLZXCVBNM';
 const LOWER_STREAM = UPPER_STREAM.toLowerCase();
@@ -73,6 +75,12 @@ const NAME_DATA = {
     neutralFirst: ['Alex', 'Sam', 'Nico', 'Vale'],
     last: ['Rossi', 'Bianchi', 'Romano', 'Gallo', 'Costa', 'Mancini', 'Lombardi', 'Moretti'],
   },
+  nl: {
+    maleFirst: ['Daan', 'Bram', 'Lars', 'Sem', 'Milan', 'Jesse', 'Thijs', 'Luuk'],
+    femaleFirst: ['Emma', 'Sophie', 'Julia', 'Tess', 'Lotte', 'Noor', 'Sanne', 'Eva'],
+    neutralFirst: ['Alex', 'Sam', 'Noa', 'Robin'],
+    last: ['De Vries', 'Jansen', 'Bakker', 'Visser', 'Smit', 'Meijer', 'De Boer', 'Mulder'],
+  },
 };
 const TITLE_HINTS = [
   { forms: ['herr'], gender: 'male', locale: 'de' },
@@ -85,6 +93,8 @@ const TITLE_HINTS = [
   { forms: ['señora', 'senora', 'sra', 'sra.'], gender: 'female', locale: 'es' },
   { forms: ['signor', 'sig.'], gender: 'male', locale: 'it' },
   { forms: ['signora', 'sig.ra'], gender: 'female', locale: 'it' },
+  { forms: ['heer', 'dhr', 'dhr.'], gender: 'male', locale: 'nl' },
+  { forms: ['mevrouw', 'mevr', 'mevr.'], gender: 'female', locale: 'nl' },
 ];
 const ADDRESS_DATA = {
   de: {
@@ -175,6 +185,7 @@ const COMPANY_BASES = {
   fr: ['Montclair', 'Rivesud', 'Beaufort', 'Clairmont', 'Valdor', 'Lumière'],
   es: ['Monteclaro', 'Rioalto', 'Solverde', 'Pradonorte', 'Puertoluz', 'Llanura'],
   it: ['Belmonte', 'Novafonte', 'Valleverde', 'Stellalta', 'Pianoro', 'Rivabella'],
+  nl: ['Noorddam', 'Rijnzicht', 'Zonhoven', 'Waterkant', 'Lindenhof', 'Brugstede'],
 };
 const COMPANY_SUFFIX_PATTERNS = [
   { re: /\bGmbH & Co\. KG\b$/i, locale: 'de' },
@@ -196,8 +207,8 @@ const COMPANY_SUFFIX_PATTERNS = [
   { re: /\bSL\b$/i, locale: 'es' },
   { re: /\bS\.r\.l\.?$/i, locale: 'it' },
   { re: /\bSpA\b$/i, locale: 'it' },
-  { re: /\bBV\b$/i, locale: 'de' },
-  { re: /\bNV\b$/i, locale: 'de' },
+  { re: /\bBV\b$/i, locale: 'nl' },
+  { re: /\bNV\b$/i, locale: 'nl' },
 ];
 
 export function isKnownCategory(category) {
@@ -689,6 +700,8 @@ function inferLocaleFromText(value) {
   if (/[éèêëàâçîïôûù]/i.test(value) || /\b(Monsieur|Madame|Rue|Boulevard|Avenue|SARL|SAS)\b/i.test(value)) return 'fr';
   if (/[ñáéíóú]/i.test(value) || /\b(Señor|Señora|Calle|Avenida|Paseo|S\.L\.|SL)\b/i.test(value)) return 'es';
   if (/[àèéìíîòóù]/i.test(value) || /\b(Signor|Signora|Via|Piazza|Corso|S\.r\.l\.|SpA)\b/i.test(value)) return 'it';
+  if (/\b(Dhr\.?|Mevr\.?|Mevrouw|Heer|Straat|Gracht|Plein|Laan|BV|NV|Nederland|Amsterdam|Rotterdam|Utrecht)\b/i.test(value)) return 'nl';
+  if (/\b(Daan|Bram|Lars|Sanne|Lotte|Jansen|Bakker|Visser|Meijer|Mulder)\b/i.test(value)) return 'nl';
   return 'en';
 }
 
@@ -702,7 +715,8 @@ function inferAddressCountry(value) {
   if (/\b(España|Spain|ES)\b/i.test(value) || /\b(Calle|Avenida|Paseo)\b/i.test(value)) return 'es';
   if (/\b(Italia|Italy|IT)\b/i.test(value) || /\b(Via|Piazza|Corso)\b/i.test(value)) return 'it';
   if (/\b(Netherlands|Nederland|NL)\b/i.test(value) || /\b\d{4}\s?[A-Z]{2}\b/.test(value)) return 'nl';
-  return inferLocaleFromText(value) === 'de' ? 'de' : 'us';
+  const locale = inferLocaleFromText(value);
+  return SUPPORTED_BENCHMARK_LOCALES.includes(locale) && locale !== 'en' ? locale : 'us';
 }
 
 function inferGenderFromName(token, locale) {

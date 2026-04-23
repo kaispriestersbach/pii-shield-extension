@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "PII Shield – TEST BUILD",
+  "name": "__MSG_extensionName__",
   "version": "0.0.1",
-  "description": "Test build with broad permissions for Playwright integration tests.",
+  "default_locale": "en",
+  "description": "__MSG_extensionDescription__",
   "permissions": [
     "storage",
     "unlimitedStorage"
@@ -21,7 +22,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["i18n.js", "content.js"],
       "css": ["styles/content.css"],
       "run_at": "document_start"
     }

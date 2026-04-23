@@ -1,11 +1,11 @@
 /**
- * Playwright-Fixture das eine echte Chrome-Extension in einen isolierten
- * Chromium-Kontext lädt.
+ * Playwright fixture that loads the Chrome extension in an isolated Chromium
+ * context.
  *
- * Ablauf:
- *  1. Baut test-build/ aus manifest.test.json + background.mock.js
- *  2. Startet Chromium mit --load-extension=test-build/
- *  3. Wartet auf den Service Worker und liefert extensionId
+ * Flow:
+ *  1. Builds test-build/ from manifest.test.json + background.mock.js.
+ *  2. Starts Chromium with --load-extension=test-build/.
+ *  3. Waits for the service worker and provides extensionId.
  */
 
 import { test as base, chromium } from '@playwright/test';
@@ -16,21 +16,42 @@ import path from 'path';
 
 const ROOT = path.resolve(__dirname, '../..');
 const TEST_BUILD = path.join(ROOT, 'test-build');
+const SUPPORTED_TEST_LOCALES = new Set(['en', 'de', 'fr', 'es', 'it', 'nl']);
 
-/** Dateien die aus dem Extension-Root ins test-build kopiert werden. */
+/** Files copied from the extension root into test-build. */
 const COPY_FILES: Array<[string, string]> = [
   ['manifest.test.json',        'manifest.json'],
   ['tests/helpers/background.mock.js', 'background.js'],
+  ['i18n.js',                   'i18n.js'],
   ['content.js',                'content.js'],
   ['replacement-engine.js',     'replacement-engine.js'],
 ];
 const COPY_DIRS: Array<[string, string]> = [
+  ['_locales', '_locales'],
   ['styles', 'styles'],
   ['popup',  'popup'],
   ['icons',  'icons'],
 ];
 
-function buildTestExtension(): string {
+function normalizeTestLocale(locale: string): string {
+  const language = String(locale || 'en').split('-')[0].toLowerCase();
+  return SUPPORTED_TEST_LOCALES.has(language) ? language : 'en';
+}
+
+function mirrorRequestedLocaleIntoTestBuild(locale: string) {
+  const language = normalizeTestLocale(locale);
+  const sourceMessages = path.join(ROOT, '_locales', language, 'messages.json');
+  const localesRoot = path.join(TEST_BUILD, '_locales');
+
+  for (const localeDir of fs.readdirSync(localesRoot)) {
+    const destination = path.join(localesRoot, localeDir, 'messages.json');
+    if (fs.existsSync(destination)) {
+      fs.copyFileSync(sourceMessages, destination);
+    }
+  }
+}
+
+function buildTestExtension(locale: string): string {
   fs.mkdirSync(TEST_BUILD, { recursive: true });
 
   for (const [src, dst] of COPY_FILES) {
@@ -50,27 +71,33 @@ function buildTestExtension(): string {
     }
   }
 
+  mirrorRequestedLocaleIntoTestBuild(locale);
   return TEST_BUILD;
 }
 
 type ExtensionFixtures = {
   context: BrowserContext;
   extensionId: string;
+  extensionLocale: string;
 };
 
 export const test = base.extend<ExtensionFixtures>({
-  // eslint-disable-next-line no-empty-pattern
-  context: async ({}, use) => {
-    const extensionPath = buildTestExtension();
+  extensionLocale: ['en-US', { option: true }],
+
+  context: async ({ extensionLocale }, use) => {
+    const extensionPath = buildTestExtension(extensionLocale);
     const userDataDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'pii-shield-playwright-')
     );
 
     const context = await chromium.launchPersistentContext(userDataDir, {
       headless: false,
+      locale: extensionLocale,
       args: [
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
+        `--lang=${extensionLocale}`,
+        `--accept-lang=${extensionLocale}`,
         '--no-sandbox',
         '--disable-dev-shm-usage',
       ],

@@ -6,6 +6,7 @@
 
 import assert from 'node:assert/strict';
 import {
+  SUPPORTED_BENCHMARK_LOCALES,
   createContextAwareReplacement,
   createFallbackReplacement,
   detectDeterministicPII,
@@ -85,6 +86,10 @@ test('deduplicates repeated originals', () => {
 
 section('context-aware replacements');
 
+test('documents benchmark-backed UI locales centrally', () => {
+  assert.deepEqual(SUPPORTED_BENCHMARK_LOCALES, ['en', 'de', 'fr', 'es', 'it', 'nl']);
+});
+
 test('keeps phone country code when present', () => {
   const replacement = createFallbackReplacement('+49 170 1234567', 'phone');
   assert.match(replacement, /^\+49/);
@@ -110,6 +115,16 @@ test('keeps addresses in Germany when the original is in Germany', () => {
 test('keeps the company legal suffix', () => {
   const replacement = createFallbackReplacement('Beispiel Holding GmbH', 'company');
   assert.match(replacement, /\bGmbH$/);
+});
+
+test('uses Dutch replacement data for Dutch companies and addresses', () => {
+  const company = createFallbackReplacement('Voorbeeld Holding BV', 'company');
+  assert.match(company, /\bBV$/);
+  assert.match(company, /^(Noorddam|Rijnzicht|Zonhoven|Waterkant|Lindenhof|Brugstede) BV$/);
+
+  const address = createFallbackReplacement('Damstraat 12, 1012 AB Amsterdam, Nederland', 'address');
+  assert.match(address, /Nederland/);
+  assert.match(address, /\b\d{4}\s?[A-Z]{2}\b/);
 });
 
 test('keeps passport-like formats readable', () => {

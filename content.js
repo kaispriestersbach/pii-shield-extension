@@ -9,6 +9,8 @@
 (() => {
   'use strict';
 
+  const { t } = globalThis.PIIShieldI18n || { t: (key) => key };
+
   let isEnabled = true;
   let currentMode = 'reversible';
   let simpleModeModelState = null;
@@ -47,49 +49,49 @@
 
   function errorMessageFor(code) {
     switch (code) {
-      case 'ai_api_missing': return 'Die Chrome Prompt API ist in diesem Erweiterungskontext nicht verfuegbar.';
-      case 'ai_unavailable': return 'Gemini Nano ist nicht verfuegbar.';
-      case 'ai_status_failed': return 'Der Gemini-Nano-Status konnte nicht geprueft werden.';
-      case 'ai_session_failed': return 'Gemini Nano konnte nicht gestartet oder heruntergeladen werden.';
-      case 'parse_failed': return 'Die KI-Antwort konnte nicht ausgewertet werden.';
-      case 'timeout': return 'Die PII-Analyse hat zu lange gedauert.';
-      case 'detection_failed': return 'Die PII-Analyse ist fehlgeschlagen.';
-      default: return 'Unbekannter Fehler bei der PII-Analyse.';
+      case 'ai_api_missing': return t('errorAiApiMissing');
+      case 'ai_unavailable': return t('errorAiUnavailable');
+      case 'ai_status_failed': return t('errorAiStatusFailed');
+      case 'ai_session_failed': return t('errorAiSessionFailed');
+      case 'parse_failed': return t('errorParseFailed');
+      case 'timeout': return t('errorTimeout');
+      case 'detection_failed': return t('errorDetectionFailed');
+      default: return t('errorUnknownDetection');
     }
   }
 
   function manualDecisionMessageFor(code) {
     switch (code) {
       case 'simple_model_missing':
-        return 'Das Privacy-Filter-Modell ist noch nicht heruntergeladen. Bitte starte den Simple Mode im Popup und warte, bis der lokale Download abgeschlossen ist.';
+        return t('manualSimpleModelMissing');
       case 'simple_model_permission_missing':
-        return 'Der Simple Mode braucht einmalig die Download-Berechtigung fuer das Privacy-Filter-Modell. Bitte aktiviere Simple Mode im Popup und bestaetige die Berechtigung.';
+        return t('manualSimplePermissionMissing');
       case 'simple_model_downloading':
-        return 'Das Privacy-Filter-Modell wird gerade heruntergeladen oder initialisiert. Bitte warte, bis der Simple Mode als bereit angezeigt wird.';
+        return t('manualSimpleDownloading');
       case 'simple_model_download_failed':
-        return 'Das Privacy-Filter-Modell konnte nicht heruntergeladen werden. Bitte pruefe die Verbindung und versuche es im Popup erneut.';
+        return t('manualSimpleDownloadFailed');
       case 'simple_model_cache_quota_exceeded':
-        return 'Chrome konnte das Privacy-Filter-Modell nicht lokal speichern. Bitte pruefe den freien Speicherplatz und lade das Modell erneut.';
+        return t('manualSimpleQuotaExceeded');
       case 'webgpu_unavailable':
-        return 'WebGPU ist in diesem Browserprofil nicht verfuegbar. Der Simple Mode kann den Text deshalb nicht lokal maskieren.';
+        return t('manualWebGPUUnavailable');
       case 'offscreen_unavailable':
-        return 'Die lokale Modelllaufzeit konnte nicht gestartet werden.';
+        return t('manualOffscreenUnavailable');
       case 'simple_model_init_failed':
-        return 'Das lokale Privacy-Filter-Modell konnte nicht geladen werden.';
+        return t('manualSimpleInitFailed');
       case 'simple_analysis_failed':
-        return 'Der Simple Mode konnte den Text gerade nicht lokal pruefen.';
+        return t('manualSimpleAnalysisFailed');
       case 'simple_model_unavailable':
-        return 'Das lokale Privacy-Filter-Modell ist derzeit nicht bereit.';
+        return t('manualSimpleUnavailable');
       default:
-        return 'Der Simple Mode konnte den Text gerade nicht lokal maskieren.';
+        return t('manualSimpleDefault');
     }
   }
 
   function badgeTitle() {
-    if (!isEnabled) return 'PII Shield inaktiv - Klicken zum Aktivieren';
+    if (!isEnabled) return t('badgeInactive');
     return currentMode === 'simple'
-      ? 'PII Shield aktiv (Simple Mode) - Klicken zum Deaktivieren'
-      : 'PII Shield aktiv (Reversible Mode) - Klicken zum Deaktivieren';
+      ? t('badgeActiveSimple')
+      : t('badgeActiveReversible');
   }
 
   function applyStatusResponse(response) {
@@ -146,9 +148,9 @@
 
     let hint = '';
     if (type === 'anonymized') {
-      hint = '<span class="pii-shield-banner-hint">Lokal anonymisiert - Ruecktausch bleibt nur in diesem Tab.</span>';
+      hint = `<span class="pii-shield-banner-hint">${escapeHtml(t('bannerHintAnonymized'))}</span>`;
     } else if (type === 'masked') {
-      hint = '<span class="pii-shield-banner-hint">Lokal maskiert - im Simple Mode gibt es keinen Ruecktausch.</span>';
+      hint = `<span class="pii-shield-banner-hint">${escapeHtml(t('bannerHintMasked'))}</span>`;
     }
 
     const icon = type === 'deanonymized'
@@ -217,9 +219,9 @@
     const queuedBehindCurrent = pasteWorkerRunning ? pasteQueue.length : Math.max(pasteQueue.length - 1, 0);
     const detail = pasteWorkerRunning
       ? queuedBehindCurrent > 0
-        ? `Der aktuelle Text wird lokal geprueft. ${queuedBehindCurrent} weiterer Einfuegevorgang wartet bereits.`
-        : 'Der Text wird lokal geprueft und danach automatisch eingefuegt.'
-      : 'Die lokale Pruefung startet sofort.';
+        ? t(queuedBehindCurrent === 1 ? 'pasteQueuedDetail' : 'pasteQueuedDetailPlural', [queuedBehindCurrent])
+        : t('pasteRunningDetail')
+      : t('pasteStartsDetail');
     const countBadge = totalPending > 1
       ? `<span class="pii-shield-paste-status-count">${totalPending}</span>`
       : '';
@@ -228,7 +230,7 @@
       <div class="pii-shield-paste-status-content">
         <span class="pii-shield-paste-status-spinner" aria-hidden="true"></span>
         <div class="pii-shield-paste-status-text">
-          <strong>PII Shield prueft das Einfuegen...</strong>
+          <strong>${escapeHtml(t('pasteStatusTitle'))}</strong>
           <span>${escapeHtml(detail)}</span>
         </div>
         ${countBadge}
@@ -246,11 +248,11 @@
       backdrop.className = 'pii-shield-decision-backdrop';
       backdrop.innerHTML = `
         <div class="pii-shield-decision-card" role="dialog" aria-modal="true" aria-labelledby="pii-shield-decision-title">
-          <h2 id="pii-shield-decision-title">PII Shield konnte nicht lokal maskieren</h2>
+          <h2 id="pii-shield-decision-title">${escapeHtml(t('manualDialogTitle'))}</h2>
           <p>${escapeHtml(manualDecisionMessageFor(reasonCode))}</p>
           <div class="pii-shield-decision-actions">
-            <button type="button" class="pii-shield-decision-btn pii-shield-decision-cancel" data-action="cancel">Abbrechen</button>
-            <button type="button" class="pii-shield-decision-btn pii-shield-decision-insert" data-action="insert">Unmaskiert einfuegen</button>
+            <button type="button" class="pii-shield-decision-btn pii-shield-decision-cancel" data-action="cancel">${escapeHtml(t('manualCancel'))}</button>
+            <button type="button" class="pii-shield-decision-btn pii-shield-decision-insert" data-action="insert">${escapeHtml(t('manualInsert'))}</button>
           </div>
         </div>`;
 
@@ -322,7 +324,7 @@
     }
 
     showNotification(
-      isEnabled ? 'PII Shield wurde aktiviert.' : 'PII Shield wurde deaktiviert.',
+      isEnabled ? t('notifyEnabled') : t('notifyDisabled'),
       'info'
     );
   }
@@ -374,15 +376,15 @@
         const decision = await showManualDecisionDialog(result.manualDecisionReason);
         if (decision === 'insert') {
           insertTextAtTarget(target, text);
-          showNotification('Originaltext wurde auf ausdruecklichen Wunsch unmaskiert eingefuegt.', 'info');
+          showNotification(t('notifyOriginalInserted'), 'info');
         } else {
-          showNotification('Einfuegen abgebrochen.', 'info');
+          showNotification(t('notifyPasteCanceled'), 'info');
         }
         return;
       }
 
       if (result?.error) {
-        showNotification(`Einfuegen blockiert: ${errorMessageFor(result.error)}`, 'info');
+        showNotification(t('notifyPasteBlocked', [errorMessageFor(result.error)]), 'info');
         return;
       }
 
@@ -399,10 +401,10 @@
         const count = result.displaySummary?.count
           ?? Object.keys(result.replacements || {}).length
           ?? 0;
-        const transformed = result.transformType === 'masked' ? 'maskiert' : 'anonymisiert';
+        const transformed = result.transformType === 'masked' ? t('transformMasked') : t('transformAnonymized');
 
         showNotification(
-          `${count} PII-Element(e) erkannt und ${transformed}.`,
+          t('notifyPiiTransformed', [count, transformed]),
           result.transformType === 'masked' ? 'masked' : 'anonymized'
         );
         return;
@@ -413,10 +415,10 @@
         return;
       }
 
-      showNotification('Einfuegen blockiert: Keine Antwort vom Service Worker.', 'info');
+      showNotification(t('notifyNoServiceWorkerResponse'), 'info');
     } catch (error) {
       console.error('[PII Shield] Error processing paste:', error);
-      showNotification('Einfuegen blockiert: Service Worker nicht erreichbar.', 'info');
+      showNotification(t('notifyServiceWorkerUnreachable'), 'info');
     }
   }
 
@@ -443,7 +445,7 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         event.clipboardData.setData('text/plain', deanonymizedText);
-        showNotification('Anonymisierte Daten in der Antwort wurden wiederhergestellt.', 'deanonymized');
+        showNotification(t('notifyDeanonymized'), 'deanonymized');
       }
     } catch (error) {
       console.error('[PII Shield] Error processing copy:', error);

@@ -1,11 +1,11 @@
 /**
- * Paste-Interception – Integrationstests für alle 7 Chatbot-Fixtures.
+ * Paste interception integration tests for supported chatbot fixtures.
  *
- * Szenarien (pro Chatbot):
- *   S1 – Badge wird nach DOM-Load angezeigt
- *   S2 – Paste mit PII: Text wird anonymisiert, Banner erscheint
- *   S3 – Paste ohne PII: Text erscheint unverändert, kein Banner
- *   S4 – Extension deaktiviert: PII bleibt ungefiltert, kein Banner
+ * Scenarios per chatbot:
+ *   S1 - badge appears after DOM load
+ *   S2 - paste with PII: text is anonymized and banner appears
+ *   S3 - paste without PII: text appears unchanged and no banner appears
+ *   S4 - extension disabled: PII stays unfiltered
  */
 
 import { test, expect } from '../helpers/extension';
@@ -14,7 +14,7 @@ import type { Page } from '@playwright/test';
 const FIXTURE_URL = (name: string) => `http://localhost:3000/${name}.html`;
 
 const PII_TEXT  = 'Max Mustermann, max@test.de';
-const SAFE_TEXT = 'Hallo, wie geht es dir heute? Das ist ein langer Satz.';
+const SAFE_TEXT = 'Hello, how are you today? This is a long sentence.';
 
 const CHATBOTS = [
   { name: 'chatgpt',     selector: '#prompt-textarea',   type: 'contenteditable' },
@@ -34,9 +34,9 @@ const CHATBOTS = [
 ] as const;
 
 /**
- * Dispatcht ein synthetisches Paste-Event auf dem angegebenen Element.
- * Das ClipboardEvent enthält den Text im DataTransfer-Objekt, sodass
- * content.js es per `event.clipboardData.getData('text/plain')` lesen kann.
+ * Dispatches a synthetic paste event on the given element. The ClipboardEvent
+ * contains text in DataTransfer so content.js can read it through
+ * `event.clipboardData.getData('text/plain')`.
  */
 async function syntheticPaste(page: Page, selector: string, text: string) {
   await page.evaluate(
@@ -57,7 +57,7 @@ async function syntheticPaste(page: Page, selector: string, text: string) {
   );
 }
 
-/** Liefert den sichtbaren Textinhalt eines Elements (textarea.value oder innerText). */
+/** Returns visible element text (textarea.value or innerText). */
 async function editorText(page: Page, selector: string): Promise<string> {
   return page.evaluate((sel) => {
     const el = document.querySelector(sel) as HTMLElement | null;
@@ -68,14 +68,14 @@ async function editorText(page: Page, selector: string): Promise<string> {
 
 for (const bot of CHATBOTS) {
   test.describe(`${bot.name}`, () => {
-    test('S1: Badge ist nach DOM-Load sichtbar', async ({ context }) => {
+    test('S1: badge is visible after DOM load', async ({ context }) => {
       const page = await context.newPage();
       await page.goto(FIXTURE_URL(bot.name));
       await expect(page.locator('#pii-shield-badge')).toBeVisible({ timeout: 5_000 });
       await page.close();
     });
 
-    test('S2: Paste mit PII → Text anonymisiert, Banner sichtbar', async ({ context }) => {
+    test('S2: paste with PII anonymizes text and shows banner', async ({ context }) => {
       const page = await context.newPage();
       await page.goto(FIXTURE_URL(bot.name));
       await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
@@ -84,13 +84,13 @@ for (const bot of CHATBOTS) {
       const pasteStatus = page.locator('#pii-shield-paste-status');
       await expect(pasteStatus).toHaveClass(/pii-shield-paste-status-visible/, { timeout: 5_000 });
 
-      // Banner erscheint mit Anonymisierungshinweis
+      // Banner appears with anonymization notice.
       const banner = page.locator('#pii-shield-banner');
       await expect(banner).toHaveClass(/pii-shield-banner-visible/, { timeout: 5_000 });
-      await expect(banner).toContainText('PII-Element');
+      await expect(banner).toContainText('PII item');
       await expect(pasteStatus).not.toHaveClass(/pii-shield-paste-status-visible/, { timeout: 5_000 });
 
-      // Editor enthält den Fake-Namen, nicht das Original
+      // The editor contains the fake name, not the original.
       const text = await editorText(page, bot.selector);
       expect(text).toContain('Thomas Weber');
       expect(text).not.toContain('Max Mustermann');
@@ -98,7 +98,7 @@ for (const bot of CHATBOTS) {
       await page.close();
     });
 
-    test('S3: Paste ohne PII → Text unverändert, kein Banner', async ({ context }) => {
+    test('S3: paste without PII keeps text unchanged and shows no banner', async ({ context }) => {
       const page = await context.newPage();
       await page.goto(FIXTURE_URL(bot.name));
       await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
@@ -111,28 +111,28 @@ for (const bot of CHATBOTS) {
         .toContain(SAFE_TEXT.slice(0, 20));
       await expect(pasteStatus).not.toHaveClass(/pii-shield-paste-status-visible/, { timeout: 5_000 });
 
-      // Kein Banner-Element wird erzeugt
+      // No banner element is created.
       await expect(page.locator('#pii-shield-banner')).toHaveCount(0);
 
       await page.close();
     });
 
-    test('S4: Extension deaktiviert → PII bleibt ungefiltert', async ({ context }) => {
+    test('S4: disabled extension leaves PII unfiltered', async ({ context }) => {
       const page = await context.newPage();
       await page.goto(FIXTURE_URL(bot.name));
 
       const badge = page.locator('#pii-shield-badge');
       await badge.waitFor({ timeout: 5_000 });
-      await badge.click(); // → deaktivieren
+      await badge.click(); // disable
 
       await expect(badge).toHaveClass(/pii-shield-badge-disabled/, { timeout: 2_000 });
 
       await syntheticPaste(page, bot.selector, PII_TEXT);
 
-      // Bei deaktivierter Extension: kein Banner und kein Eingriff
+      // Disabled extension: no anonymized banner and no intervention.
       const banner = page.locator('#pii-shield-banner');
-      // Der Klick selbst zeigt einen Info-Banner — wir prüfen nur, dass
-      // kein "anonymized"-Banner erscheint
+      // The click itself shows an info banner, so only check that no
+      // anonymized banner appears.
       await expect(banner).not.toHaveClass(/pii-shield-banner-anonymized/);
 
       await page.close();

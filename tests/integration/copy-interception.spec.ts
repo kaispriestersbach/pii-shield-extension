@@ -1,16 +1,16 @@
 /**
- * Copy-Interception – De-Anonymisierungstest für alle 7 Chatbot-Fixtures.
+ * Copy interception de-anonymization test for supported chatbot fixtures.
  *
- * Szenario S5: Nach einem Paste mit PII (der localMappings befüllt) werden
- * beim Kopieren eines Chatbot-Textes mit Fake-Daten die Originaldaten
- * wiederhergestellt und das De-Anonymisierungs-Banner gezeigt.
+ * Scenario S5: after a paste with PII populates localMappings, copying chatbot
+ * text with fake data restores the original data and shows the
+ * de-anonymization banner.
  *
- * Ablauf pro Chatbot:
- *   1. Paste mit PII → localMappings werden befüllt (fake → original)
- *   2. Response-Bereich erhält Text mit Fake-Namen
- *   3. Synthetisches Copy-Event auf dem Response-Bereich
- *   4. Prüfung: DataTransfer enthält Originaldaten
- *   5. Prüfung: De-Anonymisierungs-Banner erscheint
+ * Flow per chatbot:
+ *   1. Paste with PII populates localMappings (fake -> original).
+ *   2. Response area receives text with fake names.
+ *   3. Synthetic copy event on the response area.
+ *   4. DataTransfer contains original data.
+ *   5. De-anonymization banner appears.
  */
 
 import { test, expect } from '../helpers/extension';
@@ -19,7 +19,7 @@ import type { Page } from '@playwright/test';
 const FIXTURE_URL = (name: string) => `http://localhost:3000/${name}.html`;
 
 const PII_TEXT = 'Max Mustermann, max@test.de';
-// Mock gibt diese Fake-Namen zurück (deterministisch aus background.mock.js)
+// The mock returns these fake names deterministically from background.mock.js.
 const FAKE_RESPONSE = 'Thomas Weber schrieb an t.weber@example.com eine Nachricht.';
 
 const CHATBOTS = [
@@ -59,9 +59,8 @@ async function syntheticPaste(page: Page, selector: string, text: string) {
 }
 
 /**
- * Setzt den Inhalt des Response-Bereichs, selektiert ihn vollständig und
- * dispatcht ein synthetisches Copy-Event. Gibt den Text zurück, den
- * content.js in den DataTransfer geschrieben hat.
+ * Sets response-area content, selects it fully, and dispatches a synthetic copy
+ * event. Returns the text content.js wrote into DataTransfer.
  */
 async function syntheticCopyFromResponseArea(
   page: Page,
@@ -71,17 +70,17 @@ async function syntheticCopyFromResponseArea(
     const area = document.getElementById('response-area');
     if (!area) return '';
 
-    // Response-Bereich mit Fake-Text befüllen
+    // Fill the response area with fake text.
     area.textContent = text;
 
-    // Text vollständig selektieren
+    // Select all text.
     const range = document.createRange();
     range.selectNodeContents(area);
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
 
-    // Synthetisches Copy-Event
+    // Synthetic copy event.
     const dt = new DataTransfer();
     const ev = new ClipboardEvent('copy', {
       clipboardData: dt,
@@ -95,28 +94,28 @@ async function syntheticCopyFromResponseArea(
 }
 
 for (const bot of CHATBOTS) {
-  test(`${bot.name} – S5: Copy de-anonymisiert Fake-Namen`, async ({ context }) => {
+  test(`${bot.name} - S5: copy de-anonymizes fake names`, async ({ context }) => {
     const page = await context.newPage();
     await page.goto(FIXTURE_URL(bot.name));
     await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
 
-    // Schritt 1: Paste mit PII → localMappings werden befüllt
+    // Step 1: paste with PII populates localMappings.
     await syntheticPaste(page, bot.selector, PII_TEXT);
 
-    // Auf Banner warten → Paste-Verarbeitung (async) ist abgeschlossen
+    // Wait for the banner so async paste processing has finished.
     await expect(page.locator('#pii-shield-banner')).toHaveClass(
       /pii-shield-banner-visible/,
       { timeout: 5_000 }
     );
 
-    // Schritt 2+3: Response-Bereich mit Fake-Namen befüllen und kopieren
+    // Steps 2+3: fill response area with fake names and copy.
     const copiedText = await syntheticCopyFromResponseArea(page, FAKE_RESPONSE);
 
-    // Schritt 4: DataTransfer enthält wiederhergestellte Originaldaten
+    // Step 4: DataTransfer contains restored original data.
     expect(copiedText).toContain('Max Mustermann');
     expect(copiedText).not.toContain('Thomas Weber');
 
-    // Schritt 5: De-Anonymisierungs-Banner erscheint
+    // Step 5: de-anonymization banner appears.
     await expect(page.locator('#pii-shield-banner')).toHaveClass(
       /pii-shield-banner-deanonymized/,
       { timeout: 3_000 }

@@ -5,12 +5,12 @@ export default defineConfig({
   timeout: 30_000,
   retries: process.env.CI ? 1 : 0,
 
-  // Chrome Extensions brauchen einen seriellen Browser-Kontext
+  // Chrome extensions need a serial browser context.
   workers: 1,
   fullyParallel: false,
 
   use: {
-    // Extensions laufen nicht im echten headless-Modus
+    // Extensions do not run in real headless mode.
     headless: false,
   },
 

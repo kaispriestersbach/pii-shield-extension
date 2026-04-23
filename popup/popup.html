@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -25,7 +25,7 @@
     <div class="popup-status" id="status-section">
       <div class="popup-status-indicator" id="status-indicator">
         <span class="popup-status-dot"></span>
-        <span class="popup-status-text" id="status-text">Aktiv</span>
+        <span class="popup-status-text" id="status-text" data-i18n="statusActive">Active</span>
       </div>
       <div class="popup-status-meta">
         <div class="popup-status-site" id="status-site"></div>
@@ -34,71 +34,71 @@
     </div>
 
     <div class="popup-section popup-mode-section">
-      <h2>Modus</h2>
+      <h2 data-i18n="sectionMode">Mode</h2>
       <div class="popup-mode-switch" id="mode-switch">
-        <button class="popup-mode-btn" id="mode-reversible" data-mode="reversible" type="button">Reversible</button>
-        <button class="popup-mode-btn" id="mode-simple" data-mode="simple" type="button">Simple</button>
+        <button class="popup-mode-btn" id="mode-reversible" data-mode="reversible" data-i18n="modeReversible" type="button">Reversible</button>
+        <button class="popup-mode-btn" id="mode-simple" data-mode="simple" data-i18n="modeSimple" type="button">Simple</button>
       </div>
-      <div class="popup-mode-hint" id="mode-hint">
-        Reversible ersetzt beim Einfügen durch Fake-Daten und stellt beim Kopieren bekannte Werte wieder her.
+      <div class="popup-mode-hint" id="mode-hint" data-i18n="modeHintReversible">
+        Reversible replaces PII with fake data when pasting and restores known values from local tab mappings when copying.
       </div>
     </div>
 
     <div class="popup-ai-status" id="ai-status-section">
       <div class="popup-ai-status-icon" id="ai-status-icon">⏳</div>
       <div class="popup-ai-status-text">
-        <span class="popup-ai-status-label">Gemini Nano (Reversible)</span>
-        <span class="popup-ai-status-value" id="ai-status-value">Wird geprüft…</span>
+        <span class="popup-ai-status-label" data-i18n="geminiStatusLabel">Gemini Nano (Reversible)</span>
+        <span class="popup-ai-status-value" id="ai-status-value" data-i18n="aiChecking">Checking...</span>
       </div>
-      <button class="popup-ai-status-action" id="btn-ai-download" hidden title="Gemini Nano herunterladen">
-        Modell laden
+      <button class="popup-ai-status-action" id="btn-ai-download" hidden title="Download Gemini Nano" data-i18n-title="geminiDownloadTitle" data-i18n="modelLoad">
+        Load model
       </button>
     </div>
 
     <div class="popup-ai-status" id="simple-status-section">
       <div class="popup-ai-status-icon" id="simple-status-icon">📦</div>
       <div class="popup-ai-status-text">
-        <span class="popup-ai-status-label">Privacy Filter (Simple)</span>
-        <span class="popup-ai-status-value" id="simple-status-value">Prüfung im Service Worker…</span>
-        <span class="popup-ai-status-detail" id="simple-status-detail">Lokal im Browser, ohne externe Dienste.</span>
+        <span class="popup-ai-status-label" data-i18n="simpleStatusLabel">Privacy Filter (Simple)</span>
+        <span class="popup-ai-status-value" id="simple-status-value" data-i18n="simpleChecking">Checking in service worker...</span>
+        <span class="popup-ai-status-detail" id="simple-status-detail" data-i18n="simpleInitialDetail">Local in the browser, without external services.</span>
       </div>
-      <button class="popup-ai-status-action" id="btn-simple-load" hidden title="Privacy-Filter-Modell herunterladen und lokal initialisieren">
-        Modell laden
+      <button class="popup-ai-status-action" id="btn-simple-load" hidden title="Download and initialize the Privacy Filter model locally" data-i18n-title="simpleLoadTitle" data-i18n="modelLoad">
+        Load model
       </button>
     </div>
 
     <div class="popup-warning">
       <span class="popup-warning-icon">⚠️</span>
       <div class="popup-warning-text">
-        <strong>Lokaler Schutz, aber kein Freifahrtschein.</strong>
-        PII Shield reduziert Risiken, ersetzt aber keine manuelle Sichtprüfung bei sensiblen oder regulierten Daten.
+        <strong data-i18n="warningStrong">Local protection, not a free pass.</strong>
+        <span data-i18n="warningText">PII Shield reduces risk, but it does not replace manual review for sensitive or regulated data.</span>
       </div>
     </div>
 
     <div class="popup-section" id="mappings-section">
       <div class="popup-section-header">
-        <h2>Aktive Ersetzungen</h2>
+        <h2 data-i18n="sectionMappings">Active replacements</h2>
         <div class="popup-btn-group">
-          <button class="popup-btn-small" id="btn-clear" title="Ersetzungen nur für diesen Tab löschen">
-            Tab löschen
+          <button class="popup-btn-small" id="btn-clear" title="Clear replacements for this tab only" data-i18n-title="clearTabTitle" data-i18n="clearTab">
+            Clear tab
           </button>
-          <button class="popup-btn-small popup-btn-danger" id="btn-clear-all" title="Ersetzungen für alle Tabs löschen">
-            Alle löschen
+          <button class="popup-btn-small popup-btn-danger" id="btn-clear-all" title="Clear replacements for all tabs" data-i18n-title="clearAllTitle" data-i18n="clearAll">
+            Clear all
           </button>
         </div>
       </div>
       <div class="popup-mappings" id="mappings-container">
-        <div class="popup-empty" id="mappings-empty">
-          Keine aktiven Ersetzungen für diesen Tab.
+        <div class="popup-empty" id="mappings-empty" data-i18n="mappingsEmpty">
+          No active replacements for this tab.
         </div>
-        <div class="popup-empty" id="mappings-static-hint" style="display:none;">
-          Im Simple Mode gibt es keine Rückzuordnung und keine tab-lokalen Fake/Original-Mappings.
+        <div class="popup-empty" id="mappings-static-hint" data-i18n="mappingsSimpleHint" style="display:none;">
+          Simple Mode has no reverse mapping and no tab-local fake/original mappings.
         </div>
         <table class="popup-table" id="mappings-table" style="display:none;">
           <thead>
             <tr>
-              <th>Fake (gesendet)</th>
-              <th>Original (lokal)</th>
+              <th data-i18n="tableFake">Fake (sent)</th>
+              <th data-i18n="tableOriginal">Original (local)</th>
             </tr>
           </thead>
           <tbody id="mappings-tbody"></tbody>
@@ -107,30 +107,30 @@
     </div>
 
     <div class="popup-section popup-info-section">
-      <h2>Aktiver Ablauf</h2>
-      <div class="popup-mode-summary" id="mode-summary">
-        Beim Einfügen werden erkannte PII durch plausible Fake-Daten ersetzt. Beim Kopieren aus dem Chat wird auf Basis lokaler Tab-Mappings zurückgetauscht.
+      <h2 data-i18n="sectionWorkflow">Active flow</h2>
+      <div class="popup-mode-summary" id="mode-summary" data-i18n="modeSummaryReversible">
+        When pasting, detected PII is replaced with plausible fake data. When copying from the chat, local tab mappings are used to restore original values.
       </div>
     </div>
 
     <div class="popup-section">
-      <h2>Simple Mode Modell</h2>
+      <h2 data-i18n="sectionSimpleModel">Simple Mode model</h2>
       <div class="popup-info-step popup-install-step">
         <span class="popup-info-step-num">1</span>
-        <span>Beim ersten Umschalten auf Simple Mode fragt PII Shield die Download-Berechtigung fuer Hugging Face an.</span>
+        <span data-i18n="simpleStep1">The first switch to Simple Mode asks PII Shield for Hugging Face download permission.</span>
       </div>
       <div class="popup-info-step popup-install-step">
         <span class="popup-info-step-num">2</span>
-        <span>Das q4 Privacy-Filter-Modell wird heruntergeladen und im Browser-Cache der Extension gespeichert.</span>
+        <span data-i18n="simpleStep2">The q4 Privacy Filter model is downloaded and stored in the extension's browser cache.</span>
       </div>
       <div class="popup-info-step popup-install-step">
         <span class="popup-info-step-num">3</span>
-        <span>Nach dem Download laeuft die Analyse lokal ueber WebGPU; deine Texte werden nicht an Hugging Face gesendet.</span>
+        <span data-i18n="simpleStep3">After download, analysis runs locally over WebGPU; your texts are not sent to Hugging Face.</span>
       </div>
     </div>
 
     <div class="popup-section">
-      <h2>Unterstützte Seiten</h2>
+      <h2 data-i18n="sectionSupportedSites">Supported sites</h2>
       <div class="popup-sites">
         <span class="popup-site-tag">ChatGPT</span>
         <span class="popup-site-tag">Claude</span>
@@ -147,6 +147,7 @@
     </footer>
   </div>
 
+  <script src="../i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -5,6 +5,11 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const { t, setDocumentLanguage, localizeDocument } = globalThis.PIIShieldI18n;
+
+  setDocumentLanguage();
+  localizeDocument();
+
   const toggleEnabled = document.getElementById('toggle-enabled');
   const statusSection = document.getElementById('status-section');
   const statusIndicator = document.getElementById('status-indicator');
@@ -56,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusSite.textContent = new URL(tab.url || '').hostname;
     }
   } catch {
-    statusSite.textContent = 'Unbekannt';
+    statusSite.textContent = t('unknownSite');
   }
 
   function sendRuntimeMessage(message) {
@@ -86,12 +91,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (enabled) {
       statusSection.classList.remove('disabled');
-      statusText.textContent = 'Aktiv';
+      statusText.textContent = t('statusActive');
       statusIndicator.querySelector('.popup-status-dot').style.background = '#3fb950';
       statusIndicator.querySelector('.popup-status-dot').style.boxShadow = '0 0 6px rgba(63, 185, 80, 0.4)';
     } else {
       statusSection.classList.add('disabled');
-      statusText.textContent = 'Deaktiviert';
+      statusText.textContent = t('statusDisabled');
       statusIndicator.querySelector('.popup-status-dot').style.background = '#8b949e';
       statusIndicator.querySelector('.popup-status-dot').style.boxShadow = 'none';
     }
@@ -105,16 +110,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     if (currentMode === 'simple') {
-      statusMode.textContent = 'Simple Mode';
-      modeHint.textContent = 'Simple maskiert erkannte PII mit typisierten Platzhaltern und fuehrt keine Rueck-Deanonymisierung aus.';
-      modeSummary.textContent = 'Beim Einfuegen werden erkannte PII lokal mit typisierten Platzhaltern wie <PRIVATE_EMAIL> oder <PRIVATE_PERSON> maskiert. Beim Kopieren greift kein Ruecktausch.';
+      statusMode.textContent = t('modeSimpleLabel');
+      modeHint.textContent = t('modeHintSimple');
+      modeSummary.textContent = t('modeSummarySimple');
       mappingsStaticHint.style.display = 'block';
       btnClear.disabled = true;
       btnClearAll.disabled = true;
     } else {
-      statusMode.textContent = 'Reversible Mode';
-      modeHint.textContent = 'Reversible ersetzt beim Einfuegen durch Fake-Daten und stellt beim Kopieren bekannte Werte aus lokalen Tab-Mappings wieder her.';
-      modeSummary.textContent = 'Beim Einfuegen werden erkannte PII durch plausible Fake-Daten ersetzt. Beim Kopieren aus dem Chat wird auf Basis lokaler Tab-Mappings zurueckgetauscht.';
+      statusMode.textContent = t('modeReversibleLabel');
+      modeHint.textContent = t('modeHintReversible');
+      modeSummary.textContent = t('modeSummaryReversible');
       mappingsStaticHint.style.display = 'none';
       btnClear.disabled = false;
       btnClearAll.disabled = false;
@@ -128,17 +133,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     btnAIDownload.hidden = true;
     btnAIDownload.disabled = false;
-    btnAIDownload.textContent = 'Modell laden';
+    btnAIDownload.textContent = t('modelLoad');
 
     if (phase === 'starting' || phase === 'creating') {
       aiStatusIcon.textContent = '⏳';
       aiStatusValue.textContent = phase === 'creating'
-        ? 'Session wird erstellt…'
-        : 'Download wird gestartet…';
+        ? t('aiSessionCreating')
+        : t('aiDownloadStarting');
       aiStatusSection.className = 'popup-ai-status';
       btnAIDownload.hidden = false;
       btnAIDownload.disabled = true;
-      btnAIDownload.textContent = 'Lädt…';
+      btnAIDownload.textContent = t('loading');
       return;
     }
 
@@ -146,38 +151,40 @@ document.addEventListener('DOMContentLoaded', async () => {
       case 'available':
         aiStatusIcon.textContent = '✅';
         aiStatusValue.textContent = status?.ready
-          ? 'Bereit'
+          ? t('ready')
           : phase === 'preparing'
-            ? 'Modell wird vorbereitet…'
-            : 'Session wird erstellt…';
+            ? t('modelPreparing')
+            : t('aiSessionCreating');
         aiStatusSection.className = 'popup-ai-status available';
         break;
       case 'downloading':
         aiStatusIcon.textContent = '⬇️';
-        aiStatusValue.textContent = `Modell wird heruntergeladen…${typeof progress === 'number' ? ` (${Math.round(progress * 100)}%)` : ''}`;
+        aiStatusValue.textContent = typeof progress === 'number'
+          ? t('modelDownloadingProgress', [t('progressPercent', [Math.round(progress * 100)])])
+          : t('modelDownloading');
         aiStatusSection.className = 'popup-ai-status';
         btnAIDownload.hidden = false;
         btnAIDownload.disabled = true;
-        btnAIDownload.textContent = 'Lädt…';
+        btnAIDownload.textContent = t('loading');
         break;
       case 'downloadable':
         aiStatusIcon.textContent = '📥';
-        aiStatusValue.textContent = 'Modell noch nicht geladen';
+        aiStatusValue.textContent = t('modelNotLoaded');
         aiStatusSection.className = 'popup-ai-status';
         btnAIDownload.hidden = false;
         break;
       case 'error':
         aiStatusIcon.textContent = '❌';
         aiStatusValue.textContent = status?.errorMessage
-          ? `Fehler: ${status.errorMessage}`
-          : 'Statusprüfung fehlgeschlagen';
+          ? t('errorWithMessage', [status.errorMessage])
+          : t('statusCheckFailed');
         aiStatusSection.className = 'popup-ai-status unavailable';
         break;
       default:
         aiStatusIcon.textContent = '❌';
         aiStatusValue.textContent = status?.errorCode === 'ai_api_missing'
-          ? 'Prompt API nicht in diesem Kontext verfügbar'
-          : 'Nicht verfügbar auf diesem Gerät';
+          ? t('promptApiUnavailable')
+          : t('deviceUnavailable');
         aiStatusSection.className = 'popup-ai-status unavailable';
     }
   }
@@ -186,58 +193,58 @@ document.addEventListener('DOMContentLoaded', async () => {
     simpleStatusSection.className = 'popup-ai-status';
     btnSimpleLoad.hidden = true;
     btnSimpleLoad.disabled = false;
-    btnSimpleLoad.textContent = 'Modell laden';
+    btnSimpleLoad.textContent = t('modelLoad');
 
     const downloadState = status?.downloadState || 'idle';
     const progress = Number.isFinite(status?.progress)
       ? Math.max(0, Math.min(1, status.progress))
       : null;
-    const progressText = progress === null ? '' : ` (${Math.round(progress * 100)}%)`;
+    const progressText = progress === null ? '' : t('progressPercent', [Math.round(progress * 100)]);
 
     if (downloadState === 'permission_missing' || status?.lastError === 'simple_model_permission_missing') {
       simpleStatusIcon.textContent = '🔐';
-      simpleStatusValue.textContent = 'Download-Berechtigung fehlt';
-      simpleStatusDetail.textContent = 'Aktiviere Simple Mode erneut und bestaetige den Modell-Download von Hugging Face.';
+      simpleStatusValue.textContent = t('simplePermissionMissingValue');
+      simpleStatusDetail.textContent = t('simplePermissionMissingDetail');
       simpleStatusSection.classList.add('unavailable');
       btnSimpleLoad.hidden = false;
-      btnSimpleLoad.textContent = 'Berechtigen';
+      btnSimpleLoad.textContent = t('authorize');
       return;
     }
 
     if (status.loading || downloadState === 'downloading' || downloadState === 'loading') {
       simpleStatusIcon.textContent = downloadState === 'downloading' ? '⬇️' : '⏳';
       simpleStatusValue.textContent = downloadState === 'downloading'
-        ? `Modell wird heruntergeladen…${progressText}`
-        : 'Lokales Modell wird initialisiert…';
+        ? t('modelDownloadingProgress', [progressText])
+        : t('simpleModelInitializing');
       simpleStatusDetail.textContent = status?.currentFile
-        ? `Aktuelle Datei: ${status.currentFile}`
-        : 'Die Offscreen-Laufzeit bereitet Privacy Filter ueber WebGPU vor.';
+        ? t('simpleCurrentFile', [status.currentFile])
+        : t('simplePreparingWebGPU');
       btnSimpleLoad.hidden = false;
       btnSimpleLoad.disabled = true;
-      btnSimpleLoad.textContent = 'Lädt…';
+      btnSimpleLoad.textContent = t('loading');
       return;
     }
 
     if (status.ready) {
       simpleStatusIcon.textContent = '✅';
-      simpleStatusValue.textContent = 'Bereit';
-      simpleStatusDetail.textContent = 'Privacy Filter laeuft lokal im Browser ueber WebGPU.';
+      simpleStatusValue.textContent = t('ready');
+      simpleStatusDetail.textContent = t('simpleReadyDetail');
       simpleStatusSection.classList.add('available');
       return;
     }
 
     if (status.lastError) {
       simpleStatusIcon.textContent = '❌';
-      simpleStatusValue.textContent = 'Nicht bereit';
-      simpleStatusDetail.textContent = `Letzter Fehler: ${status.lastError}`;
+      simpleStatusValue.textContent = t('notReady');
+      simpleStatusDetail.textContent = t('lastError', [status.lastError]);
       simpleStatusSection.classList.add('unavailable');
       btnSimpleLoad.hidden = false;
     } else {
       simpleStatusIcon.textContent = status?.cached ? '🧩' : '📥';
-      simpleStatusValue.textContent = status?.cached ? 'Im Browser-Cache' : 'Bereit zum Download';
+      simpleStatusValue.textContent = status?.cached ? t('cachedValue') : t('readyToDownload');
       simpleStatusDetail.textContent = status?.cached
-        ? 'Das Modell ist lokal gespeichert und muss nur noch initialisiert werden.'
-        : 'Beim ersten Simple-Mode-Start wird das Modell einmalig von Hugging Face geladen.';
+        ? t('cachedDetail')
+        : t('readyToDownloadDetail');
       btnSimpleLoad.hidden = false;
     }
   }
@@ -380,8 +387,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (currentMode !== 'reversible') return;
 
     const confirmed = window.confirm(
-      'Alle Mappings für alle Tabs unwiderruflich löschen?\n\n' +
-      'Nach dem Löschen können kopierte Antworten nicht mehr automatisch zu den Originaldaten zurückgeführt werden.'
+      t('clearAllConfirm')
     );
     if (!confirmed) return;
 
