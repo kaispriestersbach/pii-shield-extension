@@ -2,6 +2,8 @@
   "name": "pii-shield-tests",
   "version": "1.1.1",
   "private": true,
+  "author": "Kai Spriestersbach <kai@afaik.de>",
+  "homepage": "https://www.afaik.de",
   "scripts": {
     "build": "node scripts/build-offscreen-runtime.mjs",
     "build:offscreen": "node scripts/build-offscreen-runtime.mjs",

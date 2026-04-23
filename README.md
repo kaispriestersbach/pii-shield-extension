@@ -5,6 +5,9 @@
 [![Local first](https://img.shields.io/badge/Privacy-local--first-0f766e)](#privacy-and-security-model)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+Created and maintained by [Kai Spriestersbach](https://www.afaik.de)
+([kai@afaik.de](mailto:kai@afaik.de)).
+
 **PII Shield** is a Chrome extension that reduces the risk of exposing
 personally identifiable information (PII) to AI chatbots. It intercepts text
 before it reaches supported chatbot pages, detects sensitive values locally in
@@ -265,6 +268,13 @@ Before preparing an unpacked release or store package:
 - Browser UI languages outside the bundled locales fall back to English.
 - Supported chatbot sites can change their DOM and clipboard behavior over time;
   integration tests should be updated when a platform changes.
+
+## Maintainer
+
+PII Shield is created and maintained by
+[Kai Spriestersbach](https://www.afaik.de)
+([kai@afaik.de](mailto:kai@afaik.de)), with a focus on privacy-preserving AI
+workflows, local-first browser tooling, and secure automation.
 
 ## License
 
