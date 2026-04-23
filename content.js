@@ -46,7 +46,10 @@
 
   function errorMessageFor(code) {
     switch (code) {
+      case 'ai_api_missing': return 'Die Chrome Prompt API ist in diesem Erweiterungskontext nicht verfügbar.';
       case 'ai_unavailable': return 'Gemini Nano ist nicht verfügbar.';
+      case 'ai_status_failed': return 'Der Gemini-Nano-Status konnte nicht geprüft werden.';
+      case 'ai_session_failed': return 'Gemini Nano konnte nicht gestartet oder heruntergeladen werden.';
       case 'parse_failed':   return 'Die KI-Antwort konnte nicht ausgewertet werden.';
       case 'timeout': return 'Die PII-Analyse hat zu lange gedauert.';
       case 'detection_failed': return 'Die PII-Analyse ist fehlgeschlagen.';

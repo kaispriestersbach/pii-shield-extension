@@ -23,6 +23,18 @@ const mappingTouchedAt = new Map();
 /** @type {LanguageModelSession|null} */
 let aiSession = null;
 
+/** @type {Promise<LanguageModelSession|null>|null} */
+let aiSessionPromise = null;
+
+let aiStatus = {
+  availability: 'unknown',
+  phase: 'unchecked',
+  progress: null,
+  errorCode: null,
+  errorMessage: null,
+  updatedAt: null
+};
+
 /** Whether the extension is enabled */
 let isEnabled = true;
 
@@ -86,51 +98,204 @@ Do not include generic terms, common nouns, code, or non-identifying text.`;
 
 // ─── AI Session Management ──────────────────────────────────────────────────
 
-async function getAIStatus() {
-  if (!globalThis.LanguageModel ||
-      typeof globalThis.LanguageModel.availability !== 'function') {
-    return { availability: 'unavailable', reason: 'prompt_api_missing' };
+function setAIStatus(patch) {
+  aiStatus = {
+    ...aiStatus,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+}
+
+function getAIStatusSnapshot() {
+  return {
+    ...aiStatus,
+    ready: Boolean(aiSession)
+  };
+}
+
+function hasLanguageModelAPI() {
+  return Boolean(globalThis.LanguageModel) &&
+    typeof globalThis.LanguageModel.availability === 'function' &&
+    typeof globalThis.LanguageModel.create === 'function';
+}
+
+function errorCodeFromAIStatus() {
+  if (aiStatus.errorCode) return aiStatus.errorCode;
+  if (aiStatus.availability === 'unavailable') return 'ai_unavailable';
+  if (aiStatus.availability === 'error') return 'ai_status_failed';
+  return 'ai_unavailable';
+}
+
+function monitorDownload(m) {
+  setAIStatus({
+    availability: 'downloading',
+    phase: 'downloading',
+    progress: 0,
+    errorCode: null,
+    errorMessage: null,
+  });
+
+  m.addEventListener('downloadprogress', (event) => {
+    const progress = typeof event.loaded === 'number' ? event.loaded : null;
+    setAIStatus({
+      availability: progress === 1 ? 'available' : 'downloading',
+      phase: progress === 1 ? 'preparing' : 'downloading',
+      progress,
+      errorCode: null,
+      errorMessage: null,
+    });
+    if (progress !== null) {
+      console.log(`[PII Shield] Gemini Nano download progress: ${Math.round(progress * 100)}%.`);
+    }
+  });
+}
+
+async function refreshAIStatus() {
+  if (aiSession) {
+    setAIStatus({
+      availability: 'available',
+      phase: 'ready',
+      progress: 1,
+      errorCode: null,
+      errorMessage: null,
+    });
+    return getAIStatusSnapshot();
+  }
+
+  if (aiSessionPromise) return getAIStatusSnapshot();
+
+  if (!hasLanguageModelAPI()) {
+    setAIStatus({
+      availability: 'unavailable',
+      phase: 'unavailable',
+      progress: null,
+      errorCode: 'ai_api_missing',
+      errorMessage: 'Chrome Prompt API is not exposed in this extension context.',
+    });
+    return getAIStatusSnapshot();
   }
 
   try {
+    setAIStatus({ phase: 'checking', errorCode: null, errorMessage: null });
     const availability = await globalThis.LanguageModel.availability();
-    return { availability };
+    setAIStatus({
+      availability,
+      phase: availability === 'available' ? 'ready' : availability,
+      progress: availability === 'available' ? 1 : null,
+      errorCode: availability === 'unavailable' ? 'ai_unavailable' : null,
+      errorMessage: null,
+    });
+    return getAIStatusSnapshot();
   } catch (err) {
-    console.error('[PII Shield] AI availability check failed:', err);
-    return {
+    console.error('[PII Shield] Failed to check AI availability:', err);
+    setAIStatus({
       availability: 'error',
-      reason: err?.message || 'availability_failed',
-    };
+      phase: 'error',
+      progress: null,
+      errorCode: 'ai_status_failed',
+      errorMessage: err?.message || String(err),
+    });
+    return getAIStatusSnapshot();
   }
 }
 
-async function getAISession() {
-  if (aiSession) return aiSession;
-
-  const status = await getAIStatus();
-  console.log('[PII Shield] AI availability:', status.availability);
-
-  if (status.availability !== 'available') {
-    return null;
-  }
+async function ensureAISessionStarted() {
+  if (aiSession || aiSessionPromise) return;
 
   try {
-    aiSession = await globalThis.LanguageModel.create({
+    if (!hasLanguageModelAPI()) {
+      setAIStatus({
+        availability: 'unavailable',
+        phase: 'unavailable',
+        progress: null,
+        errorCode: 'ai_api_missing',
+        errorMessage: 'Chrome Prompt API is not exposed in this extension context.',
+      });
+      return;
+    }
+
+    setAIStatus({ phase: 'checking', errorCode: null, errorMessage: null });
+    const availability = await globalThis.LanguageModel.availability();
+    console.log('[PII Shield] AI availability:', availability);
+
+    if (availability === 'unavailable') {
+      console.error('[PII Shield] Gemini Nano is not available on this device.');
+      setAIStatus({
+        availability,
+        phase: 'unavailable',
+        progress: null,
+        errorCode: 'ai_unavailable',
+        errorMessage: null,
+      });
+      return;
+    }
+
+    setAIStatus({
+      availability,
+      phase: availability === 'available' ? 'creating' : 'starting',
+      progress: availability === 'available' ? 1 : null,
+      errorCode: null,
+      errorMessage: null,
+    });
+
+    aiSessionPromise = globalThis.LanguageModel.create({
+      monitor: monitorDownload,
       initialPrompts: [
         {
           role: 'system',
           content: SYSTEM_PROMPT,
         },
       ],
-    });
-
-    console.log('[PII Shield] AI session created successfully.');
-    return aiSession;
+    })
+      .then(session => {
+        aiSession = session;
+        setAIStatus({
+          availability: 'available',
+          phase: 'ready',
+          progress: 1,
+          errorCode: null,
+          errorMessage: null,
+        });
+        console.log('[PII Shield] AI session created successfully.');
+        return aiSession;
+      })
+      .catch(err => {
+        console.error('[PII Shield] Failed to create AI session:', err);
+        aiSession = null;
+        setAIStatus({
+          availability: 'error',
+          phase: 'error',
+          progress: null,
+          errorCode: 'ai_session_failed',
+          errorMessage: err?.message || String(err),
+        });
+        return null;
+      })
+      .finally(() => {
+        aiSessionPromise = null;
+      });
   } catch (err) {
-    console.error('[PII Shield] Failed to create AI session:', err);
+    console.error('[PII Shield] Failed to start AI session:', err);
     aiSession = null;
-    return null;
+    aiSessionPromise = null;
+    setAIStatus({
+      availability: 'error',
+      phase: 'error',
+      progress: null,
+      errorCode: 'ai_session_failed',
+      errorMessage: err?.message || String(err),
+    });
   }
+}
+
+async function getAISession() {
+  if (aiSession) return aiSession;
+
+  await ensureAISessionStarted();
+
+  if (aiSession) return aiSession;
+  if (aiSessionPromise) return aiSessionPromise;
+  return null;
 }
 
 // ─── PII Detection & Anonymization ─────────────────────────────────────────
@@ -153,7 +318,7 @@ async function detectAndAnonymize(text, tabId) {
       anonymizedText: text,
       replacements: {},
       hasPII: false,
-      error: 'ai_unavailable',
+      error: errorCodeFromAIStatus(),
     };
   }
 
@@ -583,11 +748,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case 'GET_AI_STATUS': {
-      getAIStatus()
+      refreshAIStatus()
         .then(status => sendResponse(status))
         .catch(err => {
-          console.error('[PII Shield] AI status request failed:', err);
-          sendResponse({ availability: 'error', reason: 'status_failed' });
+          console.error('[PII Shield] AI status error:', err);
+          sendResponse({
+            ...getAIStatusSnapshot(),
+            availability: 'unavailable',
+            phase: 'error',
+            ready: false,
+            errorCode: 'ai_status_failed',
+            errorMessage: err?.message || String(err),
+          });
+        });
+      return true;
+    }
+
+    case 'ENSURE_AI_READY': {
+      ensureAISessionStarted()
+        .then(() => sendResponse(getAIStatusSnapshot()))
+        .catch(err => {
+          console.error('[PII Shield] AI warm-up error:', err);
+          sendResponse({
+            ...getAIStatusSnapshot(),
+            availability: 'unavailable',
+            phase: 'error',
+            ready: false,
+            errorCode: 'ai_session_failed',
+            errorMessage: err?.message || String(err),
+          });
         });
       return true;
     }
@@ -598,7 +787,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           isEnabled = message.enabled;
           return chrome.storage.local.set({ piiShieldEnabled: isEnabled });
         })
-        .then(() => sendResponse({ enabled: isEnabled }))
+        .then(() => {
+          if (isEnabled) void ensureAISessionStarted();
+          sendResponse({ enabled: isEnabled });
+        })
         .catch(err => {
           console.error('[PII Shield] Set enabled failed:', err);
           sendResponse({ enabled: isEnabled, error: 'set_enabled_failed' });
