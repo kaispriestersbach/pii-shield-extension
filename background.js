@@ -17,8 +17,10 @@ import {
 import {
   createContextAwareReplacement,
   createFallbackReplacement,
+  canonicalPersonNameKey,
   detectDeterministicPII,
   isKnownCategory,
+  normalizePersonNameOriginal,
 } from './pii-detectors.js';
 
 // ─── Shared State ────────────────────────────────────────────────────────────
@@ -74,6 +76,7 @@ const SIMPLE_MODEL_REVISION = '7ffa9a043d54d1be65afb281eddf0ffbe629385b';
 const SIMPLE_MODEL_SOURCE = 'huggingface';
 const SIMPLE_MODEL_CACHE_NAME = 'transformers-cache';
 const SIMPLE_MODEL_OPTIONAL_DOWNLOAD_ORIGINS = [
+  'https://huggingface.co/*',
   'https://*.hf.co/*',
 ];
 const SIMPLE_MODEL_REMOTE_FILES = [
@@ -135,6 +138,14 @@ For each PII entity, return:
 - replacement: a realistic but fake value that preserves the broad format
 - category: one of the allowed schema categories
 - confidence: optional number between 0 and 1
+
+Return the smallest exact substring that identifies the PII. Do not include
+surrounding labels, captions, filenames, image alt-text descriptors, years,
+dimensions, sizes, or shape/style words. For example, in a phrase like
+"Kai Example 2026 square", the person entity is only "Kai Example".
+
+If the same person appears with different capitalization, treat it as the same
+person and prefer the best-cased occurrence as the original value.
 
 Keep replacements semantically coherent so they do not feel jarring:
 - names: keep the same apparent gender, honorific, number of parts, and cultural context when obvious
@@ -467,18 +478,25 @@ function parseAIEntities(response, text) {
 function normalizeReversibleEntity(entity, text, source) {
   if (!entity || typeof entity !== 'object') return null;
 
-  const original = String(entity.original || '').trim();
-  if (!original) return null;
-
-  const start = text.indexOf(original);
-  if (start === -1) return null;
-
   const category = isKnownCategory(entity.category) ? entity.category : 'other';
+  const rawOriginal = String(entity.original || '').trim();
+  const normalizedOriginal = category === 'name'
+    ? normalizePersonNameOriginal(rawOriginal)
+    : rawOriginal;
+  if (!normalizedOriginal) return null;
+
+  const range = findEntityRange(text, normalizedOriginal);
+  if (!range) return null;
+
+  const original = text.slice(range.start, range.end);
+  const canonicalKey = canonicalReversibleEntityKey(category, original);
+
   const confidence = Number.isFinite(entity.confidence) ? entity.confidence : undefined;
   const replacement = createContextAwareReplacement(
     original,
     category,
-    String(entity.replacement || '').trim()
+    String(entity.replacement || '').trim(),
+    canonicalKey ? { seedKey: canonicalKey } : {}
   );
 
   if (!replacement || original === replacement || replacement.includes(original)) return null;
@@ -487,25 +505,29 @@ function normalizeReversibleEntity(entity, text, source) {
     original,
     replacement,
     category,
+    canonicalKey,
     source,
-    start,
-    end: start + original.length,
+    start: range.start,
+    end: range.end,
     confidence,
   };
 }
 
 function mergeReversibleEntities(text, ...groups) {
-  const byOriginal = new Map();
+  const byCanonical = new Map();
 
   for (const entity of groups.flat()) {
     const normalized = normalizeReversibleEntity(entity, text, entity.source || 'ai');
     if (!normalized) continue;
-    if (!byOriginal.has(normalized.original)) {
-      byOriginal.set(normalized.original, normalized);
+
+    const key = normalized.canonicalKey || `${normalized.category}:${normalized.original}`;
+    const existing = byCanonical.get(key);
+    if (!existing || isPreferredReversibleEntity(normalized, existing)) {
+      byCanonical.set(key, normalized);
     }
   }
 
-  const entities = [...byOriginal.values()].sort((a, b) => {
+  const entities = [...byCanonical.values()].sort((a, b) => {
     if (b.original.length !== a.original.length) {
       return b.original.length - a.original.length;
     }
@@ -515,20 +537,81 @@ function mergeReversibleEntities(text, ...groups) {
   return ensureUniqueReplacements(entities);
 }
 
+function findEntityRange(text, original) {
+  const exactStart = text.indexOf(original);
+  if (exactStart !== -1) {
+    return { start: exactStart, end: exactStart + original.length };
+  }
+
+  const match = text.match(new RegExp(escapeRegExp(original), 'iu'));
+  if (!match || typeof match.index !== 'number') return null;
+
+  return {
+    start: match.index,
+    end: match.index + match[0].length,
+  };
+}
+
+function canonicalReversibleEntityKey(category, original) {
+  if (category === 'name') {
+    const key = canonicalPersonNameKey(original);
+    return key ? `${category}:${key}` : '';
+  }
+
+  if (category === 'email') {
+    return `${category}:${original.toLocaleLowerCase()}`;
+  }
+
+  return `${category}:${original}`;
+}
+
+function isPreferredReversibleEntity(candidate, existing) {
+  const sourceScore = sourcePreference(candidate.source) - sourcePreference(existing.source);
+  if (sourceScore !== 0) return sourceScore > 0;
+
+  const caseScore = nameCaseScore(candidate.original) - nameCaseScore(existing.original);
+  if (caseScore !== 0) return caseScore > 0;
+
+  const confidenceScore = (candidate.confidence || 0) - (existing.confidence || 0);
+  if (confidenceScore !== 0) return confidenceScore > 0;
+
+  return candidate.start < existing.start;
+}
+
+function sourcePreference(source) {
+  return source === 'deterministic' ? 2 : 1;
+}
+
+function nameCaseScore(value) {
+  const normalized = normalizePersonNameOriginal(value);
+  if (!normalized) return 0;
+
+  return normalized.split(/\s+/).reduce((score, part) => {
+    if (/^[A-ZÄÖÜ][\p{L}'’-]*$/u.test(part)) return score + 2;
+    if (/^[\p{L}'’-]+$/u.test(part)) return score + 1;
+    return score;
+  }, 0);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function ensureUniqueReplacements(entities) {
   const used = new Map();
 
   return entities.map((entity) => {
     let replacement = entity.replacement;
     let variant = 0;
+    const entityKey = entity.canonicalKey || `${entity.category}:${entity.original}`;
 
-    while (used.has(replacement) && used.get(replacement) !== entity.original) {
+    while (used.has(replacement) && used.get(replacement) !== entityKey) {
       variant++;
       replacement = createContextAwareReplacement(
         entity.original,
         entity.category,
         entity.replacement,
-        { variant }
+        { seedKey: entityKey, variant }
       );
 
       if (!replacement || replacement === entity.original || replacement.includes(entity.original)) {
@@ -540,7 +623,7 @@ function ensureUniqueReplacements(entities) {
       }
     }
 
-    used.set(replacement, entity.original);
+    used.set(replacement, entityKey);
     return { ...entity, replacement };
   });
 }

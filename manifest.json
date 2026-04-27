@@ -10,6 +10,7 @@
     "offscreen"
   ],
   "optional_host_permissions": [
+    "https://huggingface.co/*",
     "https://*.hf.co/*"
   ],
   "host_permissions": [

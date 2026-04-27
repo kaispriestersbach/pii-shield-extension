@@ -122,6 +122,21 @@ test('replaces a bare name', () => {
   assert.equal(out, 'Herr Mustermann kommt.');
 });
 
+test('replaces word-like values case-insensitively', () => {
+  const out = applyReplacements('Über Kai Spriestersbach und Kai spriestersbach.', [
+    { from: 'Kai Spriestersbach', to: 'Alex Walker' },
+  ]);
+  assert.equal(out, 'Über Alex Walker und Alex Walker.');
+});
+
+test('keeps non-name context tokens around case-insensitive matches', () => {
+  const entries = buildReplacementEntries(
+    new Map([['Kai Spriestersbach', 'Alex Walker']])
+  );
+  const out = applyReplacements('Kai spriestersbach 2026 square', entries);
+  assert.equal(out, 'Alex Walker 2026 square');
+});
+
 test('replaces a genitive inflection ("Webers" → "Mustermanns")', () => {
   const out = applyReplacements('Webers Vertrag wurde geprüft.', [
     { from: 'Weber', to: 'Mustermann' },

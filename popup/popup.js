@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let aiStatusPoll = null;
   let simpleStatusPoll = null;
   const simpleModelOptionalDownloadOrigins = [
+    'https://huggingface.co/*',
     'https://*.hf.co/*',
   ];
 

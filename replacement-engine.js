@@ -59,7 +59,7 @@ export function findReplacementSpans(text, entries) {
       const escaped = from.replace(REGEX_META, '\\$&');
       const re = new RegExp(
         `(?<=^|[^\\p{L}\\p{N}_])${escaped}(\\p{L}{0,2})(?=$|[^\\p{L}\\p{N}_])`,
-        'gu'
+        'giu'
       );
       for (const match of text.matchAll(re)) {
         candidates.push({

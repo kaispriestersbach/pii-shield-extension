@@ -37,6 +37,36 @@ const DIGIT_STREAM = '5117064928351047283946501928374650918273645546372819';
 const UPPER_STREAM = 'QWERTYUPASDFGHJKLZXCVBNM';
 const LOWER_STREAM = UPPER_STREAM.toLowerCase();
 const NAME_PARTICLES = new Set(['von', 'van', 'de', 'del', 'da', 'di', 'bin', 'al']);
+const NON_NAME_CONTEXT_TOKENS = new Set([
+  'alt',
+  'avatar',
+  'banner',
+  'card',
+  'circle',
+  'cover',
+  'crop',
+  'cropped',
+  'file',
+  'gmbh',
+  'headshot',
+  'hero',
+  'image',
+  'img',
+  'inc',
+  'kg',
+  'llc',
+  'ltd',
+  'logo',
+  'photo',
+  'picture',
+  'portrait',
+  'profile',
+  'round',
+  'square',
+  'thumbnail',
+  'thumb',
+  'ug',
+]);
 const COUNTRY_CALLING_CODES = [
   '998', '995', '994', '977', '976', '975', '974', '973', '972', '971', '386',
   '385', '372', '370', '359', '358', '356', '354', '353', '352', '351', '234',
@@ -276,6 +306,31 @@ export function createFallbackReplacement(original, category, options = {}) {
     default:
       return createGenericReplacement(original, options);
   }
+}
+
+export function normalizePersonNameOriginal(value) {
+  const parts = String(value || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+
+  const title = getTitleInfo(parts[0]);
+  const body = normalizePersonNameParts(title ? parts.slice(1) : parts);
+  if (body.length === 0) return '';
+
+  return title ? `${parts[0]} ${body.join(' ')}` : body.join(' ');
+}
+
+export function canonicalPersonNameKey(value) {
+  const normalized = normalizePersonNameOriginal(value);
+  if (!normalized) return '';
+
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  const title = getTitleInfo(parts[0]);
+  const body = title ? parts.slice(1) : parts;
+
+  return body
+    .map(part => stripEdgePunctuation(part).toLocaleLowerCase())
+    .filter(Boolean)
+    .join(' ');
 }
 
 function scan(text, regex, category, validator, entities, occupied, seen) {
@@ -542,13 +597,22 @@ function makeDate(original, seedKey) {
 }
 
 function createNameReplacement(original, seedKey) {
-  const parts = original.trim().split(/\s+/).filter(Boolean);
+  const normalizedOriginal = normalizePersonNameOriginal(original);
+  if (!normalizedOriginal) return createGenericReplacement(original);
+
+  const parts = normalizedOriginal.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return createGenericReplacement(original);
 
   const title = getTitleInfo(parts[0]);
-  const locale = title?.locale || inferLocaleFromText(original);
+  const locale = title?.locale || inferLocaleFromText(normalizedOriginal);
   const body = title ? parts.slice(1) : parts;
   const titleText = title ? parts[0] : '';
+  const hasExternalSeed = seedKey
+    && seedKey !== original
+    && !String(seedKey).startsWith(`${original}#`);
+  const nameSeedKey = hasExternalSeed
+    ? seedKey
+    : canonicalPersonNameKey(normalizedOriginal) || seedKey;
 
   if (body.length === 0) return titleText || createGenericReplacement(original);
 
@@ -558,10 +622,60 @@ function createNameReplacement(original, seedKey) {
     total: body.length,
     gender,
     locale,
-    seedKey,
+    seedKey: nameSeedKey,
   }));
 
   return titleText ? `${titleText} ${mapped.join(' ')}` : mapped.join(' ');
+}
+
+function normalizePersonNameParts(parts) {
+  const normalized = [];
+
+  for (const part of parts) {
+    const token = normalizePersonNameToken(part);
+    if (!token) continue;
+
+    if (normalized.length >= 2 && isAllCapsAcronym(token)) break;
+
+    if (!isPlausiblePersonNamePart(token)) {
+      if (normalized.length > 0) break;
+      continue;
+    }
+
+    normalized.push(token);
+  }
+
+  return normalized;
+}
+
+function normalizePersonNameToken(part) {
+  const withoutEdgePunctuation = stripEdgePunctuation(part);
+  const withoutImageExtension = withoutEdgePunctuation.replace(/\.(?:jpe?g|png|gif|webp|avif|svg)$/i, '');
+  return stripEdgePunctuation(withoutImageExtension);
+}
+
+function isPlausiblePersonNamePart(part) {
+  const normalized = normalizePersonNameToken(part);
+  if (!normalized) return false;
+
+  const lower = normalized.toLocaleLowerCase();
+  if (NON_NAME_CONTEXT_TOKENS.has(lower)) return false;
+  if (/^(?:jpe?g|png|gif|webp|avif|svg)$/i.test(normalized)) return false;
+  if (/\d/.test(normalized)) return false;
+  if (NAME_PARTICLES.has(lower)) return true;
+  if (/^[\p{L}]\.$/u.test(normalized)) return true;
+
+  if (normalized.includes('-')) {
+    return normalized
+      .split('-')
+      .every(segment => segment && isPlausiblePersonNamePart(segment));
+  }
+
+  return /^[\p{L}][\p{L}'’]*$/u.test(normalized);
+}
+
+function isAllCapsAcronym(value) {
+  return /^[A-ZÄÖÜ]{2,}$/u.test(value);
 }
 
 function mapNamePart(part, context) {
@@ -769,10 +883,10 @@ function stripEdgePunctuation(value) {
 }
 
 function applyCasePattern(template, replacement) {
-  if (template.toUpperCase() === template) return replacement.toUpperCase();
-  if (template.toLowerCase() === template) return replacement.toLowerCase();
-  if (/^[A-ZÄÖÜ][a-zäöüß]+$/u.test(template)) {
-    return replacement.charAt(0).toUpperCase() + replacement.slice(1).toLowerCase();
+  if (/\p{L}/u.test(template)
+      && template.toUpperCase() === template
+      && template.toLowerCase() !== template) {
+    return replacement.toUpperCase();
   }
   return replacement;
 }

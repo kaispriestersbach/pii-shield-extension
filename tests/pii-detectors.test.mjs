@@ -7,9 +7,11 @@
 import assert from 'node:assert/strict';
 import {
   SUPPORTED_BENCHMARK_LOCALES,
+  canonicalPersonNameKey,
   createContextAwareReplacement,
   createFallbackReplacement,
   detectDeterministicPII,
+  normalizePersonNameOriginal,
 } from '../pii-detectors.js';
 
 let passed = 0;
@@ -101,6 +103,26 @@ test('keeps female honorifics and returns a plausible female name', () => {
     replacement,
     /^Frau (Anna|Sophie|Lena|Lea|Julia|Clara|Emma|Laura|Marie|Hanna) [A-ZÄÖÜ][\p{L}-]+$/u
   );
+});
+
+test('normalizes person names out of image alt-text style suffixes', () => {
+  assert.equal(
+    normalizePersonNameOriginal('Kai spriestersbach 2026 square'),
+    'Kai spriestersbach'
+  );
+  assert.equal(normalizePersonNameOriginal('Kai Spriestersbach.png'), 'Kai Spriestersbach');
+  assert.equal(normalizePersonNameOriginal('Kai Spriestersbach SEO'), 'Kai Spriestersbach');
+  assert.equal(
+    canonicalPersonNameKey('Kai spriestersbach 2026 square'),
+    canonicalPersonNameKey('Kai Spriestersbach')
+  );
+});
+
+test('uses the same fake name for case-only variants and alt-text suffixes', () => {
+  const canonical = createFallbackReplacement('Kai Spriestersbach', 'name');
+  assert.equal(createFallbackReplacement('Kai spriestersbach', 'name'), canonical);
+  assert.equal(createFallbackReplacement('Kai spriestersbach 2026 square', 'name'), canonical);
+  assert.doesNotMatch(canonical, /\b(?:CARTER|bennett|2026|square)\b/);
 });
 
 test('keeps addresses in Germany when the original is in Germany', () => {
