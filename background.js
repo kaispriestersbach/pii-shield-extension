@@ -76,7 +76,6 @@ const SIMPLE_MODEL_REVISION = '7ffa9a043d54d1be65afb281eddf0ffbe629385b';
 const SIMPLE_MODEL_SOURCE = 'huggingface';
 const SIMPLE_MODEL_CACHE_NAME = 'transformers-cache';
 const SIMPLE_MODEL_OPTIONAL_DOWNLOAD_ORIGINS = [
-  'https://huggingface.co/*',
   'https://*.hf.co/*',
 ];
 const SIMPLE_MODEL_REMOTE_FILES = [
