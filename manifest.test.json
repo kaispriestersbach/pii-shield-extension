@@ -7,7 +7,8 @@
   "permissions": [
     "storage",
     "unlimitedStorage",
-    "offscreen"
+    "offscreen",
+    "clipboardWrite"
   ],
   "optional_host_permissions": [
     "https://*.hf.co/*"
@@ -20,6 +21,12 @@
     "type": "module"
   },
   "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*"],
+      "js": ["clipboard-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": ["http://localhost:3000/*"],
       "js": ["i18n.js", "content.js"],

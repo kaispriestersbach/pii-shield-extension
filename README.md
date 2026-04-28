@@ -205,6 +205,9 @@ PII Shield is built around a local-first privacy model:
   domains listed in `manifest.json`.
 - **Data-minimal page UI:** notifications never expose original PII or mapping
   values to the host document.
+- **Write-only clipboard restoration:** copy-button interception can overwrite
+  clipboard text with restored originals, but the extension does not request
+  clipboard read access.
 - **Fail-closed automatic paste path:** runtime errors, parse failures, and
   timeouts do not silently insert the original sensitive clipboard text.
 
@@ -217,6 +220,7 @@ For additional engineering notes, see
 |------|----------------|
 | `manifest.json` | Chrome Manifest V3 definition, permissions, content-script matches, CSP, and minimum Chrome version |
 | `background.js` | Service worker orchestration, mode state, Gemini Nano session management, Privacy Filter download/cache state, tab-local mappings |
+| `clipboard-bridge.js` | Main-world bridge for chatbot copy buttons that use `navigator.clipboard.writeText()` instead of regular copy events |
 | `content.js` | Paste/copy interception, badge UI, notifications, privacy-safe page overlays, local mapping mirror for synchronous copy restoration |
 | `popup/` | Extension popup for enable/disable state, mode switching, model readiness, and active reversible mappings |
 | `offscreen/` | Offscreen document and local Privacy Filter runtime for Simple Mode |

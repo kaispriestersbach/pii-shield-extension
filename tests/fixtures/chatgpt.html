@@ -11,6 +11,7 @@
       color: #ececec; font-size: 16px; outline: none;
     }
     #response-area { margin-top: 1rem; padding: 1rem; background: #1a1a1a; border-radius: 8px; min-height: 80px; }
+    #copy-response { margin-top: .5rem; padding: .5rem .75rem; }
   </style>
 </head>
 <body>
@@ -26,5 +27,12 @@
   <div id="response-area" data-testid="response">
     Max Mustermann schrieb an max@test.de eine Nachricht.
   </div>
+  <button id="copy-response" type="button" aria-label="Antwort kopieren">Antwort kopieren</button>
+  <script>
+    document.getElementById('copy-response').addEventListener('click', async () => {
+      const text = document.getElementById('response-area').innerText;
+      await navigator.clipboard.writeText(text);
+    });
+  </script>
 </body>
 </html>

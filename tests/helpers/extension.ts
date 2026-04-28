@@ -23,6 +23,7 @@ const COPY_FILES: Array<[string, string]> = [
   ['manifest.test.json',        'manifest.json'],
   ['tests/helpers/background.mock.js', 'background.js'],
   ['i18n.js',                   'i18n.js'],
+  ['clipboard-bridge.js',       'clipboard-bridge.js'],
   ['content.js',                'content.js'],
   ['replacement-engine.js',     'replacement-engine.js'],
 ];

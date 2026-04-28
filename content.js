@@ -16,6 +16,8 @@
   let simpleModeModelState = null;
   let notificationTimeout = null;
   let copyProcessing = false;
+  let clipboardWriteInProgress = false;
+  let lastCopyIntentAt = 0;
   let pasteWorkerRunning = false;
 
   const pasteQueue = [];
@@ -33,6 +35,12 @@
   const NAME_PART = /^[\p{L}\-]+$/u;
   const REGEX_META = /[.*+?^${}()|[\]\\]/g;
   const LOCAL_MAPPING_TTL_MS = 30 * 60 * 1000;
+  const CLIPBOARD_WRITE_RETRY_DELAYS_MS = [0, 80, 240];
+  const CLIPBOARD_BRIDGE_SOURCE = 'pii-shield-clipboard-bridge';
+  const CLIPBOARD_BRIDGE_WRITE_REQUEST = 'PII_SHIELD_CLIPBOARD_WRITE_REQUEST';
+  const CLIPBOARD_BRIDGE_WRITE_RESPONSE = 'PII_SHIELD_CLIPBOARD_WRITE_RESPONSE';
+  const CLIPBOARD_WRITE_INTENT_WINDOW_MS = 2000;
+  const COPY_CONTROL_RE = /\b(copy|clipboard|kopieren|copiar|copier|copia|copie)\b|antwort\s+kopieren|copy\s+(response|answer)/i;
 
   function shouldScanPaste(text) {
     const trimmed = text.trim();
@@ -503,28 +511,40 @@
 
   // ─── Copy Flow ───────────────────────────────────────────────────────────
 
+  document.addEventListener('click', (event) => {
+    if (isLikelyCopyControlEvent(event)) {
+      markCopyIntent();
+    }
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (!isCopyShortcut(event)) return;
+    markCopyIntent();
+
+    if (!isEnabled || currentMode !== 'reversible' || clipboardWriteInProgress) return;
+
+    const result = deanonymizeCopyText(getSelectedCopyText());
+    if (!result.changed) return;
+
+    scheduleClipboardRewrite(result.text);
+  }, true);
+
   document.addEventListener('copy', (event) => {
-    if (!isEnabled || copyProcessing || currentMode !== 'reversible') return;
+    if (!isEnabled || copyProcessing || currentMode !== 'reversible' || clipboardWriteInProgress) return;
 
-    pruneLocalMappingsIfExpired();
-    if (!event.clipboardData || localMappings.size === 0) return;
-
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
-
-    const selectedText = selection.toString();
-    if (!selectedText || selectedText.trim().length < 5) return;
+    const result = deanonymizeCopyText(getSelectedCopyText());
+    if (!result.changed) return;
 
     copyProcessing = true;
 
     try {
-      const deanonymizedText = deanonymizeWithLocalMappings(selectedText);
-
-      if (deanonymizedText !== selectedText) {
+      if (event.clipboardData) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        event.clipboardData.setData('text/plain', deanonymizedText);
-        showNotification(t('notifyDeanonymized'), 'deanonymized');
+        event.clipboardData.setData('text/plain', result.text);
+        showDeanonymizedNotification();
+      } else {
+        scheduleClipboardRewrite(result.text);
       }
     } catch (error) {
       console.error('[PII Shield] Error processing copy:', error);
@@ -532,6 +552,207 @@
       copyProcessing = false;
     }
   }, true);
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+
+    const data = event.data;
+    if (!data
+      || data.source !== CLIPBOARD_BRIDGE_SOURCE
+      || data.type !== CLIPBOARD_BRIDGE_WRITE_REQUEST
+      || typeof data.id !== 'string') {
+      return;
+    }
+
+    void handleClipboardBridgeWriteRequest(data);
+  });
+
+  function markCopyIntent() {
+    lastCopyIntentAt = Date.now();
+  }
+
+  function hasRecentCopyIntent() {
+    return Date.now() - lastCopyIntentAt <= CLIPBOARD_WRITE_INTENT_WINDOW_MS;
+  }
+
+  function isCopyShortcut(event) {
+    if (event.defaultPrevented || event.isComposing) return false;
+    if (event.altKey) return false;
+
+    const key = String(event.key || '').toLowerCase();
+    if (key === 'c' && (event.ctrlKey || event.metaKey)) return true;
+    return key === 'insert' && event.ctrlKey && !event.metaKey;
+  }
+
+  function isLikelyCopyControlEvent(event) {
+    if (!event.isTrusted) return false;
+    const control = findLikelyControl(event.target);
+    if (!control) return false;
+
+    const descriptor = [
+      control.getAttribute('aria-label'),
+      control.getAttribute('title'),
+      control.getAttribute('data-testid'),
+      control.getAttribute('data-test-id'),
+      control.getAttribute('data-clipboard-action'),
+      control.textContent,
+    ].filter(Boolean).join(' ');
+
+    return COPY_CONTROL_RE.test(descriptor);
+  }
+
+  function findLikelyControl(target) {
+    if (!(target instanceof Element)) return null;
+    const control = target.closest('button, [role="button"], [aria-label], [title], [data-testid], [data-test-id]');
+    if (!control || !document.contains(control)) return null;
+    if (control.closest('#pii-shield-banner, #pii-shield-badge, #pii-shield-decision-backdrop')) return null;
+    return control;
+  }
+
+  function getSelectedCopyText() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return '';
+    return selection.toString();
+  }
+
+  function deanonymizeCopyText(text) {
+    const originalText = String(text || '');
+    if (!originalText || originalText.trim().length < 5) {
+      return { text: originalText, changed: false };
+    }
+
+    pruneLocalMappingsIfExpired();
+    if (localMappings.size === 0) {
+      return { text: originalText, changed: false };
+    }
+
+    const deanonymizedText = deanonymizeWithLocalMappings(originalText);
+    return {
+      text: deanonymizedText,
+      changed: deanonymizedText !== originalText,
+    };
+  }
+
+  async function handleClipboardBridgeWriteRequest(data) {
+    let handled = false;
+
+    try {
+      if (isEnabled && currentMode === 'reversible' && hasRecentCopyIntent()) {
+        const result = deanonymizeCopyText(data.text);
+        if (result.changed) {
+          handled = await writeTextToClipboard(result.text, { allowFallback: false });
+          if (handled) showDeanonymizedNotification();
+        }
+      }
+    } catch (error) {
+      console.error('[PII Shield] Error processing clipboard write:', error);
+    } finally {
+      window.postMessage({
+        source: CLIPBOARD_BRIDGE_SOURCE,
+        type: CLIPBOARD_BRIDGE_WRITE_RESPONSE,
+        id: data.id,
+        handled,
+      }, '*');
+    }
+  }
+
+  function scheduleClipboardRewrite(text) {
+    let notified = false;
+
+    for (const [index, delay] of CLIPBOARD_WRITE_RETRY_DELAYS_MS.entries()) {
+      setTimeout(() => {
+        void writeTextToClipboard(text, { allowFallback: index === 0 }).then((success) => {
+          if (success && !notified) {
+            notified = true;
+            showDeanonymizedNotification();
+          }
+        });
+      }, delay);
+    }
+  }
+
+  async function writeTextToClipboard(text, options = {}) {
+    if (!text) return false;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (error) {
+      console.warn('[PII Shield] Clipboard API write failed:', error);
+    }
+
+    if (options.allowFallback) {
+      return fallbackCopyText(text);
+    }
+    return false;
+  }
+
+  function fallbackCopyText(text) {
+    if (clipboardWriteInProgress) return false;
+
+    const activeElement = document.activeElement;
+    const selection = window.getSelection();
+    const ranges = [];
+
+    if (selection) {
+      for (let index = 0; index < selection.rangeCount; index++) {
+        ranges.push(selection.getRangeAt(index).cloneRange());
+      }
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-1000px';
+    textarea.style.left = '-1000px';
+    textarea.style.opacity = '0';
+
+    let copied = false;
+    const onCopy = (event) => {
+      if (!event.clipboardData) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      event.clipboardData.setData('text/plain', text);
+      copied = true;
+    };
+
+    clipboardWriteInProgress = true;
+    document.body.appendChild(textarea);
+    document.addEventListener('copy', onCopy, true);
+
+    try {
+      textarea.focus();
+      textarea.select();
+      // eslint-disable-next-line deprecation/deprecation
+      copied = document.execCommand('copy') || copied;
+    } catch (error) {
+      console.warn('[PII Shield] Fallback clipboard write failed:', error);
+    } finally {
+      document.removeEventListener('copy', onCopy, true);
+      textarea.remove();
+      clipboardWriteInProgress = false;
+
+      if (selection) {
+        selection.removeAllRanges();
+        for (const range of ranges) {
+          selection.addRange(range);
+        }
+      }
+
+      if (activeElement && typeof activeElement.focus === 'function') {
+        try { activeElement.focus(); } catch {}
+      }
+    }
+
+    return copied;
+  }
+
+  function showDeanonymizedNotification() {
+    showNotification(t('notifyDeanonymized'), 'deanonymized');
+  }
 
   // ─── Local Mapping Mirror ────────────────────────────────────────────────
 

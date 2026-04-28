@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "default_locale": "en",
   "description": "__MSG_extensionDescription__",
   "permissions": [
     "storage",
     "unlimitedStorage",
-    "offscreen"
+    "offscreen",
+    "clipboardWrite"
   ],
   "optional_host_permissions": [
     "https://*.hf.co/*"
@@ -34,6 +35,28 @@
     "type": "module"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://chat.mistral.ai/*",
+        "https://copilot.microsoft.com/*",
+        "https://chat.deepseek.com/*",
+        "https://www.perplexity.ai/*",
+        "https://grok.com/*",
+        "https://poe.com/*",
+        "https://www.meta.ai/*",
+        "https://huggingface.co/chat/*",
+        "https://www.phind.com/*",
+        "https://you.com/*",
+        "https://chat.qwen.ai/*"
+      ],
+      "js": ["clipboard-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": [
         "https://chatgpt.com/*",
