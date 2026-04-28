@@ -396,5 +396,74 @@
   },
   "notifySimpleModeNeedsPopup": {
     "message": "Open the PII Shield popup to authorize or finish preparing Simple Mode."
+  },
+  "onboardingTitle": {
+    "message": "Choose your protection mode"
+  },
+  "onboardingSubtitle": {
+    "message": "Pick how PII Shield should protect text before it is pasted into AI chats. You can change this later in the popup."
+  },
+  "onboardingModeLegend": {
+    "message": "Protection mode"
+  },
+  "onboardingRecommended": {
+    "message": "Recommended"
+  },
+  "onboardingAdvantages": {
+    "message": "Advantages"
+  },
+  "onboardingTradeoffs": {
+    "message": "Tradeoffs"
+  },
+  "onboardingReversibleTitle": {
+    "message": "Reversible"
+  },
+  "onboardingReversibleDescription": {
+    "message": "Replaces PII with plausible fake data and keeps local tab mappings for restoring known values on copy."
+  },
+  "onboardingReversiblePro1": {
+    "message": "Full workflow with PII replacement and reverse mapping."
+  },
+  "onboardingReversiblePro2": {
+    "message": "Best fit when copied answers should contain the original values again."
+  },
+  "onboardingReversibleCon1": {
+    "message": "Uses local mappings per tab, so there is more state to manage."
+  },
+  "onboardingReversibleCon2": {
+    "message": "Needs Gemini Nano availability for semantic detection."
+  },
+  "onboardingSimpleTitle": {
+    "message": "Simple"
+  },
+  "onboardingSimpleDescription": {
+    "message": "Masks detected PII with typed placeholders such as <PRIVATE_EMAIL> or <PRIVATE_PERSON>."
+  },
+  "onboardingSimplePro1": {
+    "message": "Easy one-way masking with no fake/original mappings."
+  },
+  "onboardingSimplePro2": {
+    "message": "Runs the Privacy Filter model locally after the first download."
+  },
+  "onboardingSimpleCon1": {
+    "message": "Copied answers are not restored to original values."
+  },
+  "onboardingSimpleCon2": {
+    "message": "Requires one-time download permission for the local model."
+  },
+  "onboardingStartReversible": {
+    "message": "Start with Reversible"
+  },
+  "onboardingStartSimple": {
+    "message": "Start with Simple"
+  },
+  "onboardingPrivacyNote": {
+    "message": "The recommended Reversible mode is active by default if this window is closed."
+  },
+  "onboardingSimplePermissionError": {
+    "message": "Simple Mode needs one-time download permission for the local Privacy Filter model. Reversible remains active."
+  },
+  "onboardingGenericError": {
+    "message": "The mode could not be saved. Try again from the PII Shield popup."
   }
 }

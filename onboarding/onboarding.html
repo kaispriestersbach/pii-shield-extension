@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PII Shield</title>
+  <link rel="stylesheet" href="onboarding.css">
+</head>
+<body>
+  <main class="onboarding-shell">
+    <header class="onboarding-header">
+      <div class="onboarding-brand">
+        <span class="onboarding-logo">🛡️</span>
+        <div>
+          <p class="onboarding-kicker">PII Shield</p>
+          <h1 data-i18n="onboardingTitle">Choose your protection mode</h1>
+        </div>
+      </div>
+      <p data-i18n="onboardingSubtitle">
+        Pick how PII Shield should protect text before it is pasted into AI chats. You can change this later in the popup.
+      </p>
+    </header>
+
+    <form class="onboarding-form" id="onboarding-form">
+      <fieldset class="onboarding-options">
+        <legend class="sr-only" data-i18n="onboardingModeLegend">Protection mode</legend>
+
+        <label class="onboarding-option is-selected" for="choice-reversible" data-mode-choice="reversible">
+          <input type="radio" id="choice-reversible" name="mode" value="reversible" checked>
+          <span class="onboarding-option-header">
+            <span>
+              <span class="onboarding-option-title" data-i18n="onboardingReversibleTitle">Reversible</span>
+              <span class="onboarding-option-description" data-i18n="onboardingReversibleDescription">
+                Replaces PII with plausible fake data and keeps local tab mappings for restoring known values on copy.
+              </span>
+            </span>
+            <span class="onboarding-badge" data-i18n="onboardingRecommended">Recommended</span>
+          </span>
+          <span class="onboarding-procon">
+            <span>
+              <strong data-i18n="onboardingAdvantages">Advantages</strong>
+              <span data-i18n="onboardingReversiblePro1">Full workflow with PII replacement and reverse mapping.</span>
+              <span data-i18n="onboardingReversiblePro2">Best fit when copied answers should contain the original values again.</span>
+            </span>
+            <span>
+              <strong data-i18n="onboardingTradeoffs">Tradeoffs</strong>
+              <span data-i18n="onboardingReversibleCon1">Uses local mappings per tab, so there is more state to manage.</span>
+              <span data-i18n="onboardingReversibleCon2">Needs Gemini Nano availability for semantic detection.</span>
+            </span>
+          </span>
+        </label>
+
+        <label class="onboarding-option" for="choice-simple" data-mode-choice="simple">
+          <input type="radio" id="choice-simple" name="mode" value="simple">
+          <span class="onboarding-option-header">
+            <span>
+              <span class="onboarding-option-title" data-i18n="onboardingSimpleTitle">Simple</span>
+              <span class="onboarding-option-description" data-i18n="onboardingSimpleDescription">
+                Masks detected PII with typed placeholders such as &lt;PRIVATE_EMAIL&gt; or &lt;PRIVATE_PERSON&gt;.
+              </span>
+            </span>
+          </span>
+          <span class="onboarding-procon">
+            <span>
+              <strong data-i18n="onboardingAdvantages">Advantages</strong>
+              <span data-i18n="onboardingSimplePro1">Easy one-way masking with no fake/original mappings.</span>
+              <span data-i18n="onboardingSimplePro2">Runs the Privacy Filter model locally after the first download.</span>
+            </span>
+            <span>
+              <strong data-i18n="onboardingTradeoffs">Tradeoffs</strong>
+              <span data-i18n="onboardingSimpleCon1">Copied answers are not restored to original values.</span>
+              <span data-i18n="onboardingSimpleCon2">Requires one-time download permission for the local model.</span>
+            </span>
+          </span>
+        </label>
+      </fieldset>
+
+      <div class="onboarding-error" id="onboarding-error" role="alert" hidden></div>
+
+      <button class="onboarding-primary" id="onboarding-start" type="submit" data-i18n="onboardingStartReversible">
+        Start with Reversible
+      </button>
+
+      <p class="onboarding-note" data-i18n="onboardingPrivacyNote">
+        The recommended Reversible mode is active by default if this window is closed.
+      </p>
+    </form>
+  </main>
+
+  <script src="../i18n.js"></script>
+  <script src="onboarding.js"></script>
+</body>
+</html>

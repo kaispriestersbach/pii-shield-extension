@@ -10,6 +10,12 @@ async function openPopup(context: BrowserContext, extensionId: string) {
   return popup;
 }
 
+async function openOnboarding(context: BrowserContext, extensionId: string) {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/onboarding/onboarding.html`);
+  return page;
+}
+
 async function sendRuntimeMessage<T = Record<string, unknown>>(popup: Page, message: Record<string, unknown>): Promise<T> {
   return popup.evaluate((payload) => new Promise<T>((resolve) => {
     chrome.runtime.sendMessage(payload, resolve);
@@ -57,6 +63,37 @@ for (const expected of POPUP_LOCALES) {
       await expect(popup.locator('#simple-status-value')).toContainText(expected.readyToDownload);
 
       await popup.close();
+    });
+  });
+}
+
+const ONBOARDING_LOCALES = [
+  {
+    locale: 'en-US',
+    title: 'Choose your protection mode',
+    recommended: 'Recommended',
+    start: 'Start with Reversible',
+  },
+  {
+    locale: 'de-DE',
+    title: 'Schutzmodus wählen',
+    recommended: 'Empfohlen',
+    start: 'Mit Reversible starten',
+  },
+] as const;
+
+for (const expected of ONBOARDING_LOCALES) {
+  test.describe(`onboarding i18n ${expected.locale}`, () => {
+    test.use({ extensionLocale: expected.locale });
+
+    test(`localizes onboarding chrome for ${expected.locale}`, async ({ context, extensionId }) => {
+      const onboarding = await openOnboarding(context, extensionId);
+
+      await expect(onboarding.locator('h1')).toContainText(expected.title);
+      await expect(onboarding.locator('.onboarding-badge')).toContainText(expected.recommended);
+      await expect(onboarding.locator('#onboarding-start')).toContainText(expected.start);
+
+      await onboarding.close();
     });
   });
 }

@@ -30,6 +30,7 @@ const COPY_DIRS: Array<[string, string]> = [
   ['_locales', '_locales'],
   ['styles', 'styles'],
   ['popup',  'popup'],
+  ['onboarding', 'onboarding'],
   ['icons',  'icons'],
 ];
 
