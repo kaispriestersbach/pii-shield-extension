@@ -107,5 +107,11 @@
   "transformAnonymized": { "message": "anonymisé(s)" },
   "notifyNoServiceWorkerResponse": { "message": "Collage bloqué : aucune réponse du service worker." },
   "notifyServiceWorkerUnreachable": { "message": "Collage bloqué : service worker inaccessible." },
-  "notifyDeanonymized": { "message": "Les données anonymisées dans la réponse ont été restaurées." }
+  "notifyDeanonymized": { "message": "Les données anonymisées dans la réponse ont été restaurées." },
+  "notifyPartialPaste": { "message": "Le long collage a été inséré après une vérification partielle. $COUNT$ élément(s) PII structuré(s) ont été protégés.", "placeholders": { "count": { "content": "$1" } } },
+  "notifyPartialPasteHint": { "message": "Certaines PII sémantiques peuvent rester si la vérification IA a expiré." },
+  "partialSimpleModeCta": { "message": "Utiliser le mode simple" },
+  "notifySimpleModeEnabled": { "message": "Le mode simple est actif pour les prochains collages." },
+  "notifySimpleModePreparing": { "message": "Le mode simple est en préparation. Les prochains collages pourront être masqués localement une fois prêt." },
+  "notifySimpleModeNeedsPopup": { "message": "Ouvrez la popup PII Shield pour autoriser ou terminer la préparation du mode simple." }
 }

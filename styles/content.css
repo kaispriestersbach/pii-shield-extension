@@ -112,6 +112,36 @@
   background: linear-gradient(135deg, #1a1a2e 0%, #1a0d3e 100%);
 }
 
+.pii-shield-banner-partial {
+  border-color: #b45309;
+  background: linear-gradient(135deg, #211814 0%, #3a250c 100%);
+}
+
+.pii-shield-banner-partial .pii-shield-banner-text strong {
+  color: #fbbf24;
+}
+
+.pii-shield-banner-action {
+  flex-shrink: 0;
+  border: 1px solid rgba(251, 191, 36, 0.34);
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 8px 10px;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.pii-shield-banner-action:hover {
+  border-color: rgba(251, 191, 36, 0.58);
+  background: rgba(251, 191, 36, 0.22);
+  color: #fff8dc;
+}
+
 /* Paste Loading Indicator */
 .pii-shield-paste-status {
   position: fixed;

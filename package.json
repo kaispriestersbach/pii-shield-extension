@@ -9,7 +9,7 @@
     "build:offscreen": "node scripts/build-offscreen-runtime.mjs",
     "stage:model": "node scripts/stage-model.mjs",
     "test": "playwright test",
-    "test:unit": "node tests/replacement-engine.test.mjs && node tests/pii-detectors.test.mjs && node tests/masking-engine.test.mjs",
+    "test:unit": "node tests/replacement-engine.test.mjs && node tests/pii-detectors.test.mjs && node tests/masking-engine.test.mjs && node tests/long-paste-chunker.test.mjs",
     "test:all": "npm run test:unit && npm run test",
     "serve:fixtures": "npx serve tests/fixtures -p 3000 --no-clipboard"
   },

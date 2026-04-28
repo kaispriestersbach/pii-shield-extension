@@ -9,12 +9,15 @@
  */
 
 import { test, expect } from '../helpers/extension';
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
 const FIXTURE_URL = (name: string) => `http://localhost:3000/${name}.html`;
 
 const PII_TEXT  = 'Max Mustermann, max@test.de';
 const SAFE_TEXT = 'Hello, how are you today? This is a long sentence.';
+const LONG_STRUCTURED_TEXT = `${'Please review this paragraph carefully. '.repeat(120)}
+
+Contact max@test.de before sending the final answer.`;
 
 const CHATBOTS = [
   { name: 'chatgpt',     selector: '#prompt-textarea',   type: 'contenteditable' },
@@ -64,6 +67,18 @@ async function editorText(page: Page, selector: string): Promise<string> {
     if (!el) return '';
     return (el as HTMLTextAreaElement).value ?? el.innerText ?? '';
   }, selector);
+}
+
+async function openPopup(context: BrowserContext, extensionId: string) {
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup/popup.html`);
+  return popup;
+}
+
+async function sendRuntimeMessage<T = Record<string, unknown>>(popup: Page, message: Record<string, unknown>): Promise<T> {
+  return popup.evaluate((payload) => new Promise<T>((resolve) => {
+    chrome.runtime.sendMessage(payload, resolve);
+  }), message);
 }
 
 for (const bot of CHATBOTS) {
@@ -139,3 +154,48 @@ for (const bot of CHATBOTS) {
     });
   });
 }
+
+test('long paste timeout inserts deterministic fallback and shows Simple Mode CTA', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto(FIXTURE_URL('chatgpt'));
+  await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
+
+  await syntheticPaste(page, '#prompt-textarea', LONG_STRUCTURED_TEXT);
+
+  const banner = page.locator('#pii-shield-banner');
+  await expect(banner).toHaveClass(/pii-shield-banner-partial/, { timeout: 5_000 });
+  await expect(banner).toContainText('partial check');
+  await expect(page.locator('#pii-shield-action')).toContainText('Simple Mode');
+
+  const text = await editorText(page, '#prompt-textarea');
+  expect(text).toContain('t.weber@example.com');
+  expect(text).not.toContain('max@test.de');
+
+  await page.close();
+});
+
+test('partial paste CTA can switch to ready Simple Mode', async ({ context, extensionId }) => {
+  const popup = await openPopup(context, extensionId);
+  await sendRuntimeMessage(popup, {
+    type: 'TEST_SET_SIMPLE_MODEL_STATE',
+    permissionGranted: true,
+    cached: true,
+    ready: true,
+  });
+  await popup.close();
+
+  const page = await context.newPage();
+  await page.goto(FIXTURE_URL('chatgpt'));
+  await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
+  await syntheticPaste(page, '#prompt-textarea', LONG_STRUCTURED_TEXT);
+
+  await expect(page.locator('#pii-shield-banner')).toHaveClass(/pii-shield-banner-partial/, {
+    timeout: 5_000,
+  });
+  await page.locator('#pii-shield-action').click();
+  await expect(page.locator('#pii-shield-banner')).toContainText('Simple Mode is active', {
+    timeout: 5_000,
+  });
+
+  await page.close();
+});

@@ -9,6 +9,7 @@
 
 const ANONYMIZE_DELAY_MS = 180;
 const SIMPLE_READY_DELAY_MS = 800;
+const LONG_PARTIAL_THRESHOLD = 3000;
 
 const REPLACEMENTS = {
   'Max Mustermann': 'Thomas Weber',
@@ -68,6 +69,7 @@ function baseTransformResult(text, overrides = {}) {
     },
     requiresManualDecision: false,
     manualDecisionReason: null,
+    analysisStatus: 'complete',
     ...overrides,
   };
 }
@@ -82,6 +84,18 @@ function applyMap(text, map) {
 
 function hasPII(text) {
   return Object.keys(REPLACEMENTS).some((original) => text.includes(original));
+}
+
+function shouldReturnPartial(text) {
+  return String(text || '').length >= LONG_PARTIAL_THRESHOLD;
+}
+
+function simpleModeOffer() {
+  return {
+    ready: Boolean(simpleModelState.ready),
+    cached: Boolean(simpleModelState.cached),
+    permissionGranted: Boolean(simplePermissionGranted),
+  };
 }
 
 function currentStatus() {
@@ -191,6 +205,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 email: 1,
               },
             },
+          }));
+          return;
+        }
+
+        if (shouldReturnPartial(message.text)) {
+          const partialReplacements = {};
+          if (message.text.includes('max@test.de')) {
+            partialReplacements['max@test.de'] = REPLACEMENTS['max@test.de'];
+          }
+
+          const anonymizedText = applyMap(message.text, partialReplacements);
+          tabMappings.set(tabId, Object.fromEntries(
+            Object.entries(partialReplacements).map(([original, fake]) => [fake, original])
+          ));
+          sendResponse(baseTransformResult(message.text, {
+            mode: 'reversible',
+            transformType: 'anonymized',
+            hasPII: anonymizedText !== message.text,
+            outputText: anonymizedText,
+            anonymizedText,
+            replacements: { ...partialReplacements },
+            displaySummary: {
+              count: Object.keys(partialReplacements).length,
+              categories: {
+                email: Object.keys(partialReplacements).length,
+              },
+            },
+            analysisStatus: 'partial',
+            fallbackReason: 'timeout',
+            fallbackMode: 'deterministic',
+            simpleModeOffer: simpleModeOffer(),
           }));
           return;
         }

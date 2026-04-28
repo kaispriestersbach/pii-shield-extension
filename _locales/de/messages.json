@@ -107,5 +107,11 @@
   "transformAnonymized": { "message": "anonymisiert" },
   "notifyNoServiceWorkerResponse": { "message": "Einfügen blockiert: Keine Antwort vom Service Worker." },
   "notifyServiceWorkerUnreachable": { "message": "Einfügen blockiert: Service Worker nicht erreichbar." },
-  "notifyDeanonymized": { "message": "Anonymisierte Daten in der Antwort wurden wiederhergestellt." }
+  "notifyDeanonymized": { "message": "Anonymisierte Daten in der Antwort wurden wiederhergestellt." },
+  "notifyPartialPaste": { "message": "Langer Text wurde nach einer Teilprüfung eingefügt. $COUNT$ strukturierte PII-Element(e) wurden geschützt.", "placeholders": { "count": { "content": "$1" } } },
+  "notifyPartialPasteHint": { "message": "Semantische PII kann übrig bleiben, wenn die KI-Prüfung zu lange dauert." },
+  "partialSimpleModeCta": { "message": "Simple Mode nutzen" },
+  "notifySimpleModeEnabled": { "message": "Simple Mode ist für zukünftige Einfügevorgänge aktiv." },
+  "notifySimpleModePreparing": { "message": "Simple Mode wird vorbereitet. Zukünftige Einfügungen können lokal maskiert werden, sobald er bereit ist." },
+  "notifySimpleModeNeedsPopup": { "message": "Öffne das PII-Shield-Popup, um Simple Mode zu autorisieren oder fertig vorzubereiten." }
 }

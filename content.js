@@ -143,11 +143,13 @@
     return banner;
   }
 
-  function showNotification(message, type = 'info') {
+  function showNotification(message, type = 'info', options = {}) {
     const banner = createNotificationBanner();
 
     let hint = '';
-    if (type === 'anonymized') {
+    if (options.hint) {
+      hint = `<span class="pii-shield-banner-hint">${escapeHtml(options.hint)}</span>`;
+    } else if (type === 'anonymized') {
       hint = `<span class="pii-shield-banner-hint">${escapeHtml(t('bannerHintAnonymized'))}</span>`;
     } else if (type === 'masked') {
       hint = `<span class="pii-shield-banner-hint">${escapeHtml(t('bannerHintMasked'))}</span>`;
@@ -159,7 +161,13 @@
         ? '🧼'
         : type === 'anonymized'
           ? '🛡️'
-          : 'ℹ️';
+          : type === 'partial'
+            ? '⚠️'
+            : 'ℹ️';
+
+    const action = options.actionLabel
+      ? `<button type="button" class="pii-shield-banner-action" id="pii-shield-action">${escapeHtml(options.actionLabel)}</button>`
+      : '';
 
     banner.innerHTML = `
       <div class="pii-shield-banner-content">
@@ -169,9 +177,18 @@
           <span>${escapeHtml(message)}</span>
           ${hint}
         </div>
+        ${action}
         <button class="pii-shield-banner-close" id="pii-shield-close">✕</button>
       </div>`;
     banner.className = `pii-shield-banner pii-shield-banner-${type} pii-shield-banner-visible`;
+
+    const actionButton = document.getElementById('pii-shield-action');
+    if (actionButton && typeof options.onAction === 'function') {
+      actionButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        options.onAction();
+      });
+    }
 
     const closeButton = document.getElementById('pii-shield-close');
     if (closeButton) {
@@ -183,7 +200,7 @@
     if (notificationTimeout) clearTimeout(notificationTimeout);
     notificationTimeout = setTimeout(() => {
       banner.className = 'pii-shield-banner';
-    }, 8000);
+    }, options.autoHideMs || 8000);
   }
 
   function createPasteStatusIndicator() {
@@ -388,15 +405,19 @@
         return;
       }
 
+      if (result?.analysisStatus === 'partial') {
+        const outputText = result.outputText || result.anonymizedText || text;
+        insertTextAtTarget(target, outputText);
+        applyMappingsFromPasteResult(result);
+        showPartialPasteNotification(result);
+        return;
+      }
+
       if (result?.hasPII) {
         const outputText = result.outputText || result.anonymizedText || text;
         insertTextAtTarget(target, outputText);
 
-        if (result.mode === 'reversible') {
-          addReplacementsToLocalMappings(result.replacements || {});
-        } else {
-          replaceLocalMappings({});
-        }
+        applyMappingsFromPasteResult(result);
 
         const count = result.displaySummary?.count
           ?? Object.keys(result.replacements || {}).length
@@ -419,6 +440,64 @@
     } catch (error) {
       console.error('[PII Shield] Error processing paste:', error);
       showNotification(t('notifyServiceWorkerUnreachable'), 'info');
+    }
+  }
+
+  function applyMappingsFromPasteResult(result) {
+    if (result.mode === 'reversible') {
+      addReplacementsToLocalMappings(result.replacements || {});
+    } else {
+      replaceLocalMappings({});
+    }
+  }
+
+  function showPartialPasteNotification(result) {
+    const count = result.displaySummary?.count
+      ?? Object.keys(result.replacements || {}).length
+      ?? 0;
+
+    showNotification(
+      t('notifyPartialPaste', [count]),
+      'partial',
+      {
+        hint: t('notifyPartialPasteHint'),
+        actionLabel: t('partialSimpleModeCta'),
+        autoHideMs: 14000,
+        onAction: () => {
+          void prepareSimpleModeFromBanner();
+        },
+      }
+    );
+  }
+
+  async function prepareSimpleModeFromBanner() {
+    try {
+      const status = currentMode === 'simple'
+        ? await sendMessage({ type: 'ENSURE_SIMPLE_MODEL_READY' })
+        : await sendMessage({ type: 'SET_MODE', mode: 'simple' });
+
+      applyStatusResponse(status);
+
+      const modelState = status?.simpleModeModelState || status || {};
+      if (status?.mode === 'simple' || currentMode === 'simple') {
+        showNotification(
+          modelState.ready ? t('notifySimpleModeEnabled') : t('notifySimpleModePreparing'),
+          'info'
+        );
+        return;
+      }
+
+      if (status?.error === 'simple_model_permission_missing'
+        || modelState.lastError === 'simple_model_permission_missing'
+        || modelState.downloadState === 'permission_missing') {
+        showNotification(t('notifySimpleModeNeedsPopup'), 'info');
+        return;
+      }
+
+      showNotification(t('notifySimpleModePreparing'), 'info');
+    } catch (error) {
+      console.warn('[PII Shield] Could not prepare Simple Mode from banner:', error);
+      showNotification(t('notifySimpleModeNeedsPopup'), 'info');
     }
   }
 

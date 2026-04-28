@@ -107,5 +107,11 @@
   "transformAnonymized": { "message": "geanonimiseerd" },
   "notifyNoServiceWorkerResponse": { "message": "Plakken geblokkeerd: geen reactie van de service worker." },
   "notifyServiceWorkerUnreachable": { "message": "Plakken geblokkeerd: service worker is niet bereikbaar." },
-  "notifyDeanonymized": { "message": "Geanonimiseerde gegevens in het antwoord zijn hersteld." }
+  "notifyDeanonymized": { "message": "Geanonimiseerde gegevens in het antwoord zijn hersteld." },
+  "notifyPartialPaste": { "message": "Lange tekst is ingevoegd na een gedeeltelijke controle. $COUNT$ gestructureerde PII-item(s) zijn beschermd.", "placeholders": { "count": { "content": "$1" } } },
+  "notifyPartialPasteHint": { "message": "Semantische PII kan achterblijven als de AI-controle te lang duurde." },
+  "partialSimpleModeCta": { "message": "Simple Mode gebruiken" },
+  "notifySimpleModeEnabled": { "message": "Simple Mode is actief voor toekomstige plakacties." },
+  "notifySimpleModePreparing": { "message": "Simple Mode wordt voorbereid. Toekomstige plakacties kunnen lokaal worden gemaskeerd zodra dit klaar is." },
+  "notifySimpleModeNeedsPopup": { "message": "Open de PII Shield-popup om Simple Mode te autoriseren of af te ronden." }
 }

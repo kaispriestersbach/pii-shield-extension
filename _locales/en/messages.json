@@ -373,5 +373,28 @@
   },
   "notifyDeanonymized": {
     "message": "Anonymized data in the answer was restored."
+  },
+  "notifyPartialPaste": {
+    "message": "Long paste inserted after a partial check. $COUNT$ structured PII item(s) were protected.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "notifyPartialPasteHint": {
+    "message": "Some semantic PII may remain if the AI check timed out."
+  },
+  "partialSimpleModeCta": {
+    "message": "Use Simple Mode"
+  },
+  "notifySimpleModeEnabled": {
+    "message": "Simple Mode is active for future pastes."
+  },
+  "notifySimpleModePreparing": {
+    "message": "Simple Mode is being prepared. Future pastes can use local masking when it is ready."
+  },
+  "notifySimpleModeNeedsPopup": {
+    "message": "Open the PII Shield popup to authorize or finish preparing Simple Mode."
   }
 }
