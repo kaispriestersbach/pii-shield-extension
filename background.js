@@ -79,7 +79,9 @@ let simpleModeModelState = {
   updatedAt: null,
 };
 
-const DETECTION_TIMEOUT_MS = 12000;
+// Regular reversible-mode analysis can take longer on first local AI runs.
+// Long-paste processing still has its own partial fallback budget below.
+const DETECTION_TIMEOUT_MS = 30000;
 const LONG_TEXT_THRESHOLD_CHARS = 4000;
 const AI_CHUNK_TIMEOUT_MS = 5000;
 const LONG_PASTE_ANALYSIS_BUDGET_MS = 11000;
