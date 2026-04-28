@@ -41,6 +41,9 @@ let aiStatus = {
   availability: 'unknown',
   phase: 'unchecked',
   progress: null,
+  modelParams: null,
+  sessionParams: null,
+  paramsError: null,
   errorCode: null,
   errorMessage: null,
   updatedAt: null,
@@ -70,6 +73,7 @@ let simpleModeModelState = {
 
 const DETECTION_TIMEOUT_MS = 12000;
 const MAPPING_TTL_MS = 30 * 60 * 1000;
+const AI_SESSION_TARGET_TEMPERATURE = 0.2;
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen/offscreen.html';
 const SIMPLE_MODEL_ID = 'openai/privacy-filter';
 const SIMPLE_MODEL_REVISION = '7ffa9a043d54d1be65afb281eddf0ffbe629385b';
@@ -224,6 +228,57 @@ function hasLanguageModelAPI() {
     && typeof globalThis.LanguageModel.create === 'function';
 }
 
+function hasLanguageModelParamsAPI() {
+  return Boolean(globalThis.LanguageModel)
+    && typeof globalThis.LanguageModel.params === 'function';
+}
+
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeLanguageModelParams(rawParams) {
+  const defaultTopK = finiteNumber(rawParams?.defaultTopK);
+  const maxTopK = finiteNumber(rawParams?.maxTopK);
+  const defaultTemperature = finiteNumber(rawParams?.defaultTemperature);
+  const maxTemperature = finiteNumber(rawParams?.maxTemperature);
+
+  if (defaultTopK === null
+    || maxTopK === null
+    || defaultTemperature === null
+    || maxTemperature === null
+    || maxTopK < 1
+    || maxTemperature < 0) {
+    return null;
+  }
+
+  return {
+    defaultTopK,
+    maxTopK,
+    defaultTemperature,
+    maxTemperature,
+  };
+}
+
+function resolveAISessionParams(modelParams) {
+  if (!modelParams) return null;
+
+  const topK = Math.min(
+    Math.max(1, Math.round(modelParams.defaultTopK)),
+    Math.floor(modelParams.maxTopK)
+  );
+  const temperature = Math.min(AI_SESSION_TARGET_TEMPERATURE, modelParams.maxTemperature);
+
+  if (!Number.isFinite(topK)
+    || !Number.isFinite(temperature)
+    || topK < 1
+    || temperature < 0) {
+    return null;
+  }
+
+  return { topK, temperature };
+}
+
 function withTimeout(promise, timeoutMs) {
   let timeoutId;
   const timeout = new Promise((_, reject) => {
@@ -283,6 +338,76 @@ function monitorDownload(monitor) {
       errorMessage: null,
     });
   });
+}
+
+function createBaseAISessionOptions() {
+  return {
+    monitor: monitorDownload,
+    initialPrompts: [
+      {
+        role: 'system',
+        content: SYSTEM_PROMPT,
+      },
+    ],
+  };
+}
+
+async function createAISessionOptions() {
+  const options = createBaseAISessionOptions();
+
+  if (!hasLanguageModelParamsAPI()) {
+    setAIStatus({
+      modelParams: null,
+      sessionParams: null,
+      paramsError: null,
+    });
+    return { options, usesSessionParams: false };
+  }
+
+  try {
+    const modelParams = normalizeLanguageModelParams(await globalThis.LanguageModel.params());
+    const sessionParams = resolveAISessionParams(modelParams);
+
+    setAIStatus({
+      modelParams,
+      sessionParams,
+      paramsError: sessionParams ? null : 'invalid_model_params',
+    });
+
+    if (!sessionParams) return { options, usesSessionParams: false };
+
+    return {
+      options: {
+        ...options,
+        ...sessionParams,
+      },
+      usesSessionParams: true,
+    };
+  } catch (error) {
+    setAIStatus({
+      modelParams: null,
+      sessionParams: null,
+      paramsError: error?.message || String(error),
+    });
+    return { options, usesSessionParams: false };
+  }
+}
+
+async function createAISession() {
+  const { options, usesSessionParams } = await createAISessionOptions();
+
+  try {
+    return await globalThis.LanguageModel.create(options);
+  } catch (error) {
+    if (!usesSessionParams) throw error;
+
+    console.warn('[PII Shield] Tuned AI session failed; retrying without model parameters.', error);
+    setAIStatus({
+      sessionParams: null,
+      paramsError: error?.message || String(error),
+    });
+    return globalThis.LanguageModel.create(createBaseAISessionOptions());
+  }
 }
 
 async function refreshAIStatus() {
@@ -370,15 +495,7 @@ async function ensureAISessionStarted() {
       errorMessage: null,
     });
 
-    aiSessionPromise = globalThis.LanguageModel.create({
-      monitor: monitorDownload,
-      initialPrompts: [
-        {
-          role: 'system',
-          content: SYSTEM_PROMPT,
-        },
-      ],
-    })
+    aiSessionPromise = createAISession()
       .then((session) => {
         aiSession = session;
         setAIStatus({
