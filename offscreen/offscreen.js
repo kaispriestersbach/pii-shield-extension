@@ -1,4 +1,11 @@
-import { env, pipeline } from './vendor/transformers.web.js';
+import * as ort from './vendor/ort.bundle.min.mjs';
+
+const ONNX_RUNTIME = ort.default || ort;
+ONNX_RUNTIME.env.wasm.wasmPaths = chrome.runtime.getURL('offscreen/vendor/');
+ONNX_RUNTIME.env.wasm.proxy = false;
+globalThis[Symbol.for('onnxruntime')] = ONNX_RUNTIME;
+
+const { env, pipeline } = await import('./vendor/transformers.js');
 
 const MODEL_ID = 'openai/privacy-filter';
 const MODEL_REVISION = '7ffa9a043d54d1be65afb281eddf0ffbe629385b';
@@ -10,7 +17,7 @@ env.allowLocalModels = false;
 env.remoteHost = 'https://huggingface.co/';
 env.remotePathTemplate = '{model}/resolve/{revision}/';
 env.useBrowserCache = true;
-env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('offscreen/vendor/');
+env.backends.onnx = ONNX_RUNTIME.env;
 
 let classifier = null;
 let classifierPromise = null;
