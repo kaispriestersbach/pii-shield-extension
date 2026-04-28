@@ -10,6 +10,7 @@
 const ANONYMIZE_DELAY_MS = 180;
 const SIMPLE_READY_DELAY_MS = 800;
 const LONG_PARTIAL_THRESHOLD = 3000;
+const FORCE_PARTIAL_MARKER = '[timeout]';
 
 const REPLACEMENTS = {
   'Max Mustermann': 'Thomas Weber',
@@ -87,7 +88,26 @@ function hasPII(text) {
 }
 
 function shouldReturnPartial(text) {
-  return String(text || '').length >= LONG_PARTIAL_THRESHOLD;
+  const value = String(text || '');
+  return value.length >= LONG_PARTIAL_THRESHOLD || value.includes(FORCE_PARTIAL_MARKER);
+}
+
+function simpleMaskResult(text) {
+  const maskedText = applyMap(text, SIMPLE_MASKS);
+  return baseTransformResult(text, {
+    mode: 'simple',
+    transformType: 'masked',
+    hasPII: maskedText !== text,
+    outputText: maskedText,
+    anonymizedText: maskedText,
+    displaySummary: {
+      count: Object.keys(SIMPLE_MASKS).filter((original) => text.includes(original)).length,
+      categories: {
+        person: text.includes('Max Mustermann') ? 1 : 0,
+        email: text.includes('max@test.de') ? 1 : 0,
+      },
+    },
+  });
 }
 
 function simpleModeOffer() {
@@ -179,7 +199,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         const found = hasPII(message.text);
         if (!found) {
-          sendResponse(baseTransformResult(message.text));
+          sendResponse(shouldReturnPartial(message.text)
+            ? baseTransformResult(message.text, {
+              mode: 'reversible',
+              error: 'timeout',
+            })
+            : baseTransformResult(message.text));
           return;
         }
 
@@ -194,18 +219,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
           }
 
-          sendResponse(baseTransformResult(message.text, {
-            hasPII: true,
-            outputText: applyMap(message.text, SIMPLE_MASKS),
-            anonymizedText: applyMap(message.text, SIMPLE_MASKS),
-            displaySummary: {
-              count: 2,
-              categories: {
-                person: 1,
-                email: 1,
-              },
-            },
-          }));
+          sendResponse(simpleMaskResult(message.text));
           return;
         }
 
@@ -259,6 +273,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }));
       }, ANONYMIZE_DELAY_MS);
       return true;
+    }
+
+    case 'MASK_TEXT_SIMPLE': {
+      if (!simpleModelState.ready) {
+        sendResponse(baseTransformResult(message.text, {
+          mode: 'simple',
+          transformType: 'masked',
+          requiresManualDecision: true,
+          manualDecisionReason: simpleModelState.loading
+            ? 'simple_model_downloading'
+            : simpleModelState.lastError || 'simple_model_unavailable',
+        }));
+        return false;
+      }
+
+      sendResponse(simpleMaskResult(String(message.text || '')));
+      return false;
     }
 
     case 'DEANONYMIZE_TEXT':

@@ -375,7 +375,7 @@
     "message": "Anonymized data in the answer was restored."
   },
   "notifyPartialPaste": {
-    "message": "Long paste inserted after a partial check. $COUNT$ structured PII item(s) were protected.",
+    "message": "Text inserted after a partial check. $COUNT$ structured PII item(s) were protected.",
     "placeholders": {
       "count": {
         "content": "$1"
@@ -384,6 +384,12 @@
   },
   "notifyPartialPasteHint": {
     "message": "Some semantic PII may remain if the AI check timed out."
+  },
+  "notifyPartialPasteRemasked": {
+    "message": "Current paste was remasked with Simple Mode."
+  },
+  "notifyPartialPasteRemaskUnavailable": {
+    "message": "Simple Mode is active for future pastes, but the current paste could not be safely replaced."
   },
   "partialSimpleModeCta": {
     "message": "Use Simple Mode"

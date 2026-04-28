@@ -23,6 +23,7 @@
   const pasteQueue = [];
   const localMappings = new Map();
   let localMappingsTouchedAt = 0;
+  let pendingPartialRemask = null;
 
   const PII_QUICK_PATTERNS = [
     /[\w.+-]+@[\w-]+\.[\w.-]+/,
@@ -35,6 +36,7 @@
   const NAME_PART = /^[\p{L}\-]+$/u;
   const REGEX_META = /[.*+?^${}()|[\]\\]/g;
   const LOCAL_MAPPING_TTL_MS = 30 * 60 * 1000;
+  const SIMPLE_REMASK_READY_TIMEOUT_MS = 3500;
   const CLIPBOARD_WRITE_RETRY_DELAYS_MS = [0, 80, 240];
   const CLIPBOARD_BRIDGE_SOURCE = 'pii-shield-clipboard-bridge';
   const CLIPBOARD_BRIDGE_WRITE_REQUEST = 'PII_SHIELD_CLIPBOARD_WRITE_REQUEST';
@@ -152,7 +154,21 @@
   }
 
   function showNotification(message, type = 'info', options = {}) {
+    if (type !== 'partial') {
+      clearPendingPartialRemask();
+    }
+
     const banner = createNotificationBanner();
+    let dismissed = false;
+
+    const dismiss = () => {
+      if (dismissed) return;
+      dismissed = true;
+      banner.className = 'pii-shield-banner';
+      if (typeof options.onDismiss === 'function') {
+        options.onDismiss();
+      }
+    };
 
     let hint = '';
     if (options.hint) {
@@ -194,21 +210,17 @@
     if (actionButton && typeof options.onAction === 'function') {
       actionButton.addEventListener('click', (event) => {
         event.preventDefault();
-        options.onAction();
+        void options.onAction();
       });
     }
 
     const closeButton = document.getElementById('pii-shield-close');
     if (closeButton) {
-      closeButton.addEventListener('click', () => {
-        banner.className = 'pii-shield-banner';
-      });
+      closeButton.addEventListener('click', dismiss);
     }
 
     if (notificationTimeout) clearTimeout(notificationTimeout);
-    notificationTimeout = setTimeout(() => {
-      banner.className = 'pii-shield-banner';
-    }, options.autoHideMs || 8000);
+    notificationTimeout = setTimeout(dismiss, options.autoHideMs || 8000);
   }
 
   function createPasteStatusIndicator() {
@@ -370,6 +382,7 @@
     event.preventDefault();
     event.stopImmediatePropagation();
 
+    clearPendingPartialRemask();
     pasteQueue.push({ text, target });
     updatePasteStatusIndicator();
     void runPasteWorker();
@@ -415,9 +428,13 @@
 
       if (result?.analysisStatus === 'partial') {
         const outputText = result.outputText || result.anonymizedText || text;
-        insertTextAtTarget(target, outputText);
+        const insertion = insertTextAtTarget(target, outputText);
         applyMappingsFromPasteResult(result);
-        showPartialPasteNotification(result);
+        showPartialPasteNotification(result, {
+          originalText: text,
+          insertedText: outputText,
+          insertion,
+        });
         return;
       }
 
@@ -459,10 +476,19 @@
     }
   }
 
-  function showPartialPasteNotification(result) {
+  function showPartialPasteNotification(result, remaskContext = null) {
     const count = result.displaySummary?.count
       ?? Object.keys(result.replacements || {}).length
       ?? 0;
+    const remaskRequest = remaskContext?.insertion
+      ? {
+        originalText: remaskContext.originalText,
+        insertedText: remaskContext.insertedText,
+        insertion: remaskContext.insertion,
+      }
+      : null;
+
+    pendingPartialRemask = remaskRequest;
 
     showNotification(
       t('notifyPartialPaste', [count]),
@@ -472,13 +498,27 @@
         actionLabel: t('partialSimpleModeCta'),
         autoHideMs: 14000,
         onAction: () => {
-          void prepareSimpleModeFromBanner();
+          void prepareSimpleModeFromBanner(remaskRequest);
+        },
+        onDismiss: () => {
+          clearPendingPartialRemask(remaskRequest);
         },
       }
     );
   }
 
-  async function prepareSimpleModeFromBanner() {
+  function clearPendingPartialRemask(expected = null) {
+    if (!expected || pendingPartialRemask === expected) {
+      pendingPartialRemask = null;
+    }
+  }
+
+  async function prepareSimpleModeFromBanner(remaskRequest = null) {
+    const activeRemask = remaskRequest && pendingPartialRemask === remaskRequest
+      ? remaskRequest
+      : null;
+    clearPendingPartialRemask(activeRemask);
+
     try {
       const status = currentMode === 'simple'
         ? await sendMessage({ type: 'ENSURE_SIMPLE_MODEL_READY' })
@@ -486,14 +526,7 @@
 
       applyStatusResponse(status);
 
-      const modelState = status?.simpleModeModelState || status || {};
-      if (status?.mode === 'simple' || currentMode === 'simple') {
-        showNotification(
-          modelState.ready ? t('notifySimpleModeEnabled') : t('notifySimpleModePreparing'),
-          'info'
-        );
-        return;
-      }
+      let modelState = status?.simpleModeModelState || status || {};
 
       if (status?.error === 'simple_model_permission_missing'
         || modelState.lastError === 'simple_model_permission_missing'
@@ -502,11 +535,79 @@
         return;
       }
 
+      modelState = await waitForSimpleModelReady(modelState, SIMPLE_REMASK_READY_TIMEOUT_MS);
+
+      if (modelState?.ready && activeRemask) {
+        const remasked = await remaskCurrentPasteWithSimpleMode(activeRemask);
+        if (remasked) {
+          showNotification(t('notifyPartialPasteRemasked'), 'masked');
+          return;
+        }
+
+        showNotification(t('notifyPartialPasteRemaskUnavailable'), 'info');
+        return;
+      }
+
+      if (status?.mode === 'simple' || currentMode === 'simple') {
+        showNotification(
+          modelState?.ready ? t('notifySimpleModeEnabled') : t('notifySimpleModePreparing'),
+          'info'
+        );
+        return;
+      }
+
       showNotification(t('notifySimpleModePreparing'), 'info');
     } catch (error) {
       console.warn('[PII Shield] Could not prepare Simple Mode from banner:', error);
       showNotification(t('notifySimpleModeNeedsPopup'), 'info');
     }
+  }
+
+  async function waitForSimpleModelReady(initialState, timeoutMs) {
+    let modelState = initialState || {};
+    if (modelState.ready) return modelState;
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await delay(250);
+      try {
+        const status = await sendMessage({ type: 'GET_SIMPLE_MODEL_STATUS' });
+        modelState = status?.simpleModeModelState || status || {};
+        applyStatusResponse({ simpleModeModelState: modelState });
+        if (modelState.ready || modelState.downloadState === 'permission_missing') {
+          return modelState;
+        }
+      } catch {
+        return modelState;
+      }
+    }
+
+    return modelState;
+  }
+
+  async function remaskCurrentPasteWithSimpleMode(remaskRequest) {
+    if (!remaskRequest?.originalText || !remaskRequest?.insertion) return false;
+
+    const result = await sendMessage({
+      type: 'MASK_TEXT_SIMPLE',
+      text: remaskRequest.originalText,
+    });
+
+    if (result?.requiresManualDecision || result?.error) return false;
+
+    const maskedText = result?.outputText || result?.anonymizedText;
+    if (typeof maskedText !== 'string' || maskedText === remaskRequest.originalText) return false;
+    if (!replaceInsertedPaste(remaskRequest, maskedText)) return false;
+
+    applyMappingsFromPasteResult({
+      mode: 'simple',
+      replacements: {},
+    });
+    return true;
+  }
+
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   // ─── Copy Flow ───────────────────────────────────────────────────────────
@@ -902,57 +1003,109 @@
       : document.activeElement;
 
     if (!activeElement) activeElement = findEditableElement();
-    if (!activeElement) return;
+    if (!activeElement) return null;
 
     if (activeElement !== document.activeElement) {
       try { activeElement.focus(); } catch {}
     }
 
     if (activeElement.isContentEditable || activeElement.getAttribute('contenteditable') === 'true') {
-      insertIntoContentEditable(activeElement, text);
-      return;
+      return insertIntoContentEditable(activeElement, text);
     }
 
     if (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT') {
-      insertIntoInput(activeElement, text);
-      return;
+      return insertIntoInput(activeElement, text);
     }
 
     const editableEl = findEditableElement();
-    if (!editableEl) return;
+    if (!editableEl) return null;
 
     try { editableEl.focus(); } catch {}
     if (editableEl.tagName === 'TEXTAREA' || editableEl.tagName === 'INPUT') {
-      insertIntoInput(editableEl, text);
-    } else {
-      insertIntoContentEditable(editableEl, text);
+      return insertIntoInput(editableEl, text);
     }
+
+    return insertIntoContentEditable(editableEl, text);
   }
 
   function insertIntoInput(el, text) {
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const next = el.value.slice(0, start) + text + el.value.slice(end);
+
+    setInputValue(el, next);
+
+    const caret = start + text.length;
+    try { el.setSelectionRange(caret, caret); } catch {}
+
+    dispatchInputChange(el, text, 'insertFromPaste');
+
+    return {
+      kind: 'input',
+      element: el,
+      start,
+      end: start + text.length,
+      text,
+    };
+  }
+
+  function replaceInsertedPaste(remaskRequest, replacementText) {
+    const insertion = remaskRequest.insertion;
+    if (!insertion?.element || !document.contains(insertion.element)) return false;
+
+    if (insertion.kind === 'input') {
+      return replaceInsertedInputText(insertion, remaskRequest.insertedText, replacementText);
+    }
+
+    if (insertion.kind === 'contenteditable') {
+      return replaceUniqueContentEditableText(insertion.element, remaskRequest.insertedText, replacementText);
+    }
+
+    return false;
+  }
+
+  function replaceInsertedInputText(insertion, insertedText, replacementText) {
+    const el = insertion.element;
+    const currentValue = String(el.value || '');
+    let start = insertion.start;
+    let end = insertion.end;
+
+    if (currentValue.slice(start, end) !== insertedText) {
+      const first = currentValue.indexOf(insertedText);
+      if (first === -1 || currentValue.indexOf(insertedText, first + insertedText.length) !== -1) {
+        return false;
+      }
+      start = first;
+      end = first + insertedText.length;
+    }
+
+    const next = currentValue.slice(0, start) + replacementText + currentValue.slice(end);
+    setInputValue(el, next);
+    const caret = start + replacementText.length;
+    try { el.setSelectionRange(caret, caret); } catch {}
+    dispatchInputChange(el, replacementText, 'insertReplacementText');
+    return true;
+  }
+
+  function setInputValue(el, value) {
     const proto = el.tagName === 'TEXTAREA'
       ? HTMLTextAreaElement.prototype
       : HTMLInputElement.prototype;
     const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
 
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    const next = el.value.slice(0, start) + text + el.value.slice(end);
-
     if (nativeSetter) {
-      nativeSetter.call(el, next);
+      nativeSetter.call(el, value);
     } else {
-      el.value = next;
+      el.value = value;
     }
+  }
 
-    const caret = start + text.length;
-    try { el.setSelectionRange(caret, caret); } catch {}
-
+  function dispatchInputChange(el, data, inputType) {
     try {
       el.dispatchEvent(new InputEvent('input', {
         bubbles: true,
-        inputType: 'insertFromPaste',
-        data: text,
+        inputType,
+        data,
       }));
     } catch {
       el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -981,6 +1134,93 @@
       document.execCommand('insertText', false, text);
     }
     el.dispatchEvent(new Event('input', { bubbles: true }));
+
+    return {
+      kind: 'contenteditable',
+      element: el,
+      text,
+    };
+  }
+
+  function replaceUniqueContentEditableText(el, insertedText, replacementText) {
+    const match = findUniqueTextNodeRange(el, insertedText);
+    if (!match) return false;
+
+    const range = document.createRange();
+    range.setStart(match.startNode, match.startOffset);
+    range.setEnd(match.endNode, match.endOffset);
+    range.deleteContents();
+    const replacementNode = document.createTextNode(replacementText);
+    range.insertNode(replacementNode);
+
+    const selection = window.getSelection();
+    if (selection) {
+      const after = document.createRange();
+      after.setStartAfter(replacementNode);
+      after.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(after);
+    }
+
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
+
+  function findUniqueTextNodeRange(root, needle) {
+    const target = String(needle || '');
+    if (!target) return null;
+
+    const nodes = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let combined = '';
+    let node;
+
+    while ((node = walker.nextNode())) {
+      const value = node.nodeValue || '';
+      const start = combined.length;
+      combined += value;
+      nodes.push({
+        node,
+        start,
+        end: combined.length,
+      });
+    }
+
+    const matchStart = combined.indexOf(target);
+    if (matchStart === -1 || combined.indexOf(target, matchStart + target.length) !== -1) {
+      return null;
+    }
+
+    const start = textNodePosition(nodes, matchStart, false);
+    const end = textNodePosition(nodes, matchStart + target.length, true);
+    if (!start || !end) return null;
+
+    return {
+      startNode: start.node,
+      startOffset: start.offset,
+      endNode: end.node,
+      endOffset: end.offset,
+    };
+  }
+
+  function textNodePosition(nodes, offset, preferEnd) {
+    if (nodes.length === 0) return null;
+
+    for (const entry of nodes) {
+      if (preferEnd && offset > entry.start && offset <= entry.end) {
+        return { node: entry.node, offset: offset - entry.start };
+      }
+      if (!preferEnd && offset >= entry.start && offset < entry.end) {
+        return { node: entry.node, offset: offset - entry.start };
+      }
+    }
+
+    const last = nodes[nodes.length - 1];
+    if (preferEnd && offset === last.end) {
+      return { node: last.node, offset: (last.node.nodeValue || '').length };
+    }
+
+    return null;
   }
 
   function findEditableElement() {

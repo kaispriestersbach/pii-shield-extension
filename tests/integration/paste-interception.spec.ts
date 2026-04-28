@@ -15,6 +15,8 @@ const FIXTURE_URL = (name: string) => `http://localhost:3000/${name}.html`;
 
 const PII_TEXT  = 'Max Mustermann, max@test.de';
 const SAFE_TEXT = 'Hello, how are you today? This is a long sentence.';
+const SHORT_TIMEOUT_STRUCTURED_TEXT = 'Contact [timeout] max@test.de before sending the answer.';
+const SHORT_TIMEOUT_UNSTRUCTURED_TEXT = 'Please review [timeout] this text for hidden personal details.';
 const LONG_STRUCTURED_TEXT = `${'Please review this paragraph carefully. '.repeat(120)}
 
 Contact max@test.de before sending the final answer.`;
@@ -174,7 +176,44 @@ test('long paste timeout inserts deterministic fallback and shows Simple Mode CT
   await page.close();
 });
 
-test('partial paste CTA can switch to ready Simple Mode', async ({ context, extensionId }) => {
+test('short paste timeout inserts deterministic fallback and shows Simple Mode CTA', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto(FIXTURE_URL('mistral'));
+  await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
+
+  await syntheticPaste(page, 'textarea', SHORT_TIMEOUT_STRUCTURED_TEXT);
+
+  const banner = page.locator('#pii-shield-banner');
+  await expect(banner).toHaveClass(/pii-shield-banner-partial/, { timeout: 5_000 });
+  await expect(banner).toContainText('partial check');
+  await expect(page.locator('#pii-shield-action')).toContainText('Simple Mode');
+
+  const text = await editorText(page, 'textarea');
+  expect(text).toContain('t.weber@example.com');
+  expect(text).not.toContain('max@test.de');
+
+  await page.close();
+});
+
+test('short paste timeout without deterministic hits stays blocked', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto(FIXTURE_URL('mistral'));
+  await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
+
+  await syntheticPaste(page, 'textarea', SHORT_TIMEOUT_UNSTRUCTURED_TEXT);
+
+  const banner = page.locator('#pii-shield-banner');
+  await expect(banner).toHaveClass(/pii-shield-banner-info/, { timeout: 5_000 });
+  await expect(banner).toContainText('Paste blocked');
+  await expect(banner).toContainText('too long');
+
+  const text = await editorText(page, 'textarea');
+  expect(text).toBe('');
+
+  await page.close();
+});
+
+test('partial paste CTA remasks the current textarea paste with ready Simple Mode', async ({ context, extensionId }) => {
   const popup = await openPopup(context, extensionId);
   await sendRuntimeMessage(popup, {
     type: 'TEST_SET_SIMPLE_MODEL_STATE',
@@ -185,17 +224,22 @@ test('partial paste CTA can switch to ready Simple Mode', async ({ context, exte
   await popup.close();
 
   const page = await context.newPage();
-  await page.goto(FIXTURE_URL('chatgpt'));
+  await page.goto(FIXTURE_URL('mistral'));
   await page.locator('#pii-shield-badge').waitFor({ timeout: 5_000 });
-  await syntheticPaste(page, '#prompt-textarea', LONG_STRUCTURED_TEXT);
+  await syntheticPaste(page, 'textarea', LONG_STRUCTURED_TEXT);
 
   await expect(page.locator('#pii-shield-banner')).toHaveClass(/pii-shield-banner-partial/, {
     timeout: 5_000,
   });
   await page.locator('#pii-shield-action').click();
-  await expect(page.locator('#pii-shield-banner')).toContainText('Simple Mode is active', {
+  await expect(page.locator('#pii-shield-banner')).toContainText('remasked with Simple Mode', {
     timeout: 5_000,
   });
+
+  const text = await editorText(page, 'textarea');
+  expect(text).toContain('<PRIVATE_EMAIL>');
+  expect(text).not.toContain('t.weber@example.com');
+  expect(text).not.toContain('max@test.de');
 
   await page.close();
 });

@@ -1,8 +1,8 @@
 {
   "name": "pii-shield-tests",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "private": true,
-  "author": "Kai Spriestersbach <kai@afaik.de>",
+  "author": "Kai Spriestersbach <k.spriestersbach@rptu.de>",
   "homepage": "https://www.afaik.de",
   "scripts": {
     "build": "node scripts/build-offscreen-runtime.mjs",
@@ -10,7 +10,7 @@
     "stage:model": "node scripts/stage-model.mjs",
     "bench:gemini-long-paste": "node benchmarks/gemini-long-paste/run.mjs",
     "test": "playwright test",
-    "test:unit": "node tests/replacement-engine.test.mjs && node tests/pii-detectors.test.mjs && node tests/masking-engine.test.mjs && node tests/long-paste-chunker.test.mjs",
+    "test:unit": "node tests/replacement-engine.test.mjs && node tests/pii-detectors.test.mjs && node tests/masking-engine.test.mjs && node tests/long-paste-chunker.test.mjs && node tests/paste-triage.test.mjs",
     "test:all": "npm run test:unit && npm run test",
     "serve:fixtures": "npx serve tests/fixtures -p 3000 --no-clipboard"
   },

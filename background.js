@@ -29,6 +29,10 @@ import {
   splitChunkForRetry,
   splitTextIntoChunks,
 } from './long-paste-chunker.js';
+import {
+  PASTE_TRIAGE_DECISIONS,
+  triageReversiblePaste,
+} from './paste-triage.js';
 
 // ─── Shared State ────────────────────────────────────────────────────────────
 
@@ -1120,6 +1124,26 @@ async function buildReversibleTransformResult(text, entities, tabId, overrides =
 
 async function detectAndAnonymize(text, tabId, telemetry = null) {
   const deterministicEntities = detectDeterministicPII(text);
+  const triage = triageReversiblePaste(text, deterministicEntities);
+
+  if (triage.decision === PASTE_TRIAGE_DECISIONS.SAFE_SKIP_AI) {
+    if (telemetry) {
+      telemetry.analysisStatus = 'complete';
+      telemetry.fallbackReason = null;
+      telemetry.chunkCount = 0;
+    }
+    return baseTransformResult(text, { mode: 'reversible' });
+  }
+
+  if (triage.decision === PASTE_TRIAGE_DECISIONS.DETERMINISTIC_ONLY) {
+    if (telemetry) {
+      telemetry.analysisStatus = 'complete';
+      telemetry.fallbackReason = null;
+      telemetry.chunkCount = 0;
+    }
+    return buildReversibleTransformResult(text, deterministicEntities, tabId);
+  }
+
   const session = await getAISession();
   captureBenchSessionTelemetry(telemetry, session);
 
@@ -1167,6 +1191,22 @@ async function detectAndAnonymize(text, tabId, telemetry = null) {
 
     return buildReversibleTransformResult(text, entities, tabId);
   } catch (error) {
+    if (error?.code === 'timeout' && deterministicEntities.length > 0) {
+      if (telemetry) {
+        telemetry.analysisStatus = 'partial';
+        telemetry.fallbackReason = 'timeout';
+        telemetry.timeoutCount += 1;
+        captureBenchSessionTelemetry(telemetry, session);
+      }
+
+      return buildReversibleTransformResult(text, deterministicEntities, tabId, {
+        analysisStatus: 'partial',
+        fallbackReason: 'timeout',
+        fallbackMode: 'deterministic',
+        simpleModeOffer: await getSimpleModeOffer(),
+      });
+    }
+
     if (telemetry) {
       telemetry.analysisStatus = 'error';
       telemetry.fallbackReason = error?.code || 'detection_failed';
@@ -1766,6 +1806,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse(baseTransformResult(message.text, {
             error: error?.code || 'detection_failed',
           }));
+        });
+      return true;
+    }
+
+    case 'MASK_TEXT_SIMPLE': {
+      initializationPromise
+        .then(() => {
+          if (!isEnabled) return baseTransformResult(message.text, { mode: 'simple' });
+          return detectAndMaskSimple(String(message.text || ''));
+        })
+        .then((result) => sendResponse(result))
+        .catch((error) => {
+          console.error('[PII Shield] Simple remask error:', error);
+          sendResponse(manualDecisionResult(String(message.text || ''), error?.code || 'simple_analysis_failed'));
         });
       return true;
     }
