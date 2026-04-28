@@ -1,8 +1,13 @@
 import { test, expect } from '../helpers/extension';
 import type { BrowserContext, Page } from '@playwright/test';
 
-async function openOnboarding(context: BrowserContext, extensionId: string) {
+async function openOnboarding(
+  context: BrowserContext,
+  extensionId: string,
+  viewport?: { width: number; height: number }
+) {
   const page = await context.newPage();
+  if (viewport) await page.setViewportSize(viewport);
   await page.goto(`chrome-extension://${extensionId}/onboarding/onboarding.html`);
   return page;
 }
@@ -59,6 +64,29 @@ test('onboarding defaults to recommended Reversible mode with explanatory copy',
 
   const status = await getStatus(context, extensionId);
   expect(status.mode).toBe('reversible');
+});
+
+test('onboarding lays out mode cards side by side on wide viewports and stacks on narrow viewports', async ({ context, extensionId }) => {
+  const wide = await openOnboarding(context, extensionId, { width: 820, height: 640 });
+  const wideReversible = await wide.locator('[data-mode-choice="reversible"]').boundingBox();
+  const wideSimple = await wide.locator('[data-mode-choice="simple"]').boundingBox();
+
+  expect(wideReversible).not.toBeNull();
+  expect(wideSimple).not.toBeNull();
+  expect(Math.abs((wideReversible?.y || 0) - (wideSimple?.y || 0))).toBeLessThan(8);
+  expect(wideSimple?.x || 0).toBeGreaterThan(wideReversible?.x || 0);
+  await wide.close();
+
+  const narrow = await openOnboarding(context, extensionId, { width: 640, height: 720 });
+  const narrowReversible = await narrow.locator('[data-mode-choice="reversible"]').boundingBox();
+  const narrowSimple = await narrow.locator('[data-mode-choice="simple"]').boundingBox();
+
+  expect(narrowReversible).not.toBeNull();
+  expect(narrowSimple).not.toBeNull();
+  expect(narrowSimple?.y || 0).toBeGreaterThan(
+    (narrowReversible?.y || 0) + (narrowReversible?.height || 0)
+  );
+  await narrow.close();
 });
 
 test('confirming Reversible keeps the selected mode active', async ({ context, extensionId }) => {

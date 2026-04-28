@@ -5,7 +5,7 @@
 }
 
 body {
-  min-width: 420px;
+  min-width: 0;
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   background: #0d1117;
@@ -15,10 +15,12 @@ body {
 }
 
 .onboarding-shell {
+  width: min(100%, 820px);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  margin: 0 auto;
   padding: 18px;
 }
 
@@ -73,12 +75,14 @@ h1 {
 
 .onboarding-options {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   border: 0;
 }
 
 .onboarding-option {
   display: grid;
+  align-content: start;
   gap: 12px;
   padding: 14px;
   border: 1px solid #30363d;
@@ -211,15 +215,17 @@ h1 {
   border: 0;
 }
 
-@media (max-width: 440px) {
-  body {
-    min-width: 0;
-  }
-
+@media (max-width: 700px) {
   .onboarding-shell {
     padding: 14px;
   }
 
+  .onboarding-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 440px) {
   .onboarding-procon {
     grid-template-columns: 1fr;
   }

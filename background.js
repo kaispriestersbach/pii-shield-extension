@@ -1790,7 +1790,7 @@ async function openFirstInstallOnboarding() {
   await chrome.windows.create({
     url: chrome.runtime.getURL(ONBOARDING_PAGE_PATH),
     type: 'popup',
-    width: 460,
+    width: 820,
     height: 640,
     focused: true,
   });
