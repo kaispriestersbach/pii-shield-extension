@@ -10,8 +10,8 @@ export default defineConfig({
   fullyParallel: false,
 
   use: {
-    // Extensions do not run in real headless mode.
-    headless: false,
+    // Extension tests run headless via the Playwright Chromium channel.
+    headless: true,
   },
 
   webServer: {

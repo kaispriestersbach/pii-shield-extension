@@ -241,9 +241,11 @@ Useful scripts:
 |---------|---------|
 | `npm run build` | Stage the offscreen Transformers.js and ONNX runtime files |
 | `npm run test:unit` | Run unit tests for replacement, deterministic detectors, and masking |
-| `npm run test` | Run Playwright extension integration tests |
+| `npm run test` | Run Playwright extension integration tests headless |
 | `npm run test:all` | Run unit and Playwright tests |
 | `npm run serve:fixtures` | Serve local chatbot fixtures for manual debugging |
+
+Use `npx playwright test --headed` when a visible browser is helpful for debugging.
 
 When changing user-facing text, update every locale in `_locales/*/messages.json`.
 When changing supported sites, update both `host_permissions` and

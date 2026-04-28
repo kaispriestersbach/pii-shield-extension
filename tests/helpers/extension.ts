@@ -85,14 +85,15 @@ type ExtensionFixtures = {
 export const test = base.extend<ExtensionFixtures>({
   extensionLocale: ['en-US', { option: true }],
 
-  context: async ({ extensionLocale }, use) => {
+  context: async ({ extensionLocale, headless }, use) => {
     const extensionPath = buildTestExtension(extensionLocale);
     const userDataDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'pii-shield-playwright-')
     );
 
     const context = await chromium.launchPersistentContext(userDataDir, {
-      headless: false,
+      channel: 'chromium',
+      headless,
       locale: extensionLocale,
       args: [
         `--disable-extensions-except=${extensionPath}`,
