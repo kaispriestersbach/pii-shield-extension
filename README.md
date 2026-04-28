@@ -5,19 +5,28 @@
 [![Local first](https://img.shields.io/badge/Privacy-local--first-0f766e)](#privacy-and-security-model)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Created and maintained by [Kai Spriestersbach](https://www.afaik.de)
-([kai@afaik.de](mailto:kai@afaik.de)).
+Created and maintained by Kai Spriestersbach
+([k.spriestersbach@rptu.de](mailto:k.spriestersbach@rptu.de)).
 
-**PII Shield** is a Chrome extension that reduces the risk of exposing
-personally identifiable information (PII) to AI chatbots. It intercepts text
-before it reaches supported chatbot pages, detects sensitive values locally in
-the browser, and either replaces them with plausible synthetic data or masks
-them with typed placeholders.
+## Research Prototype Warning
 
-The extension is designed for everyday AI-assisted work where prompts often
-contain names, emails, phone numbers, addresses, contracts, customer context, or
-other sensitive operational details. It is local-first, has no backend service,
-and keeps runtime permissions scoped to the sites it protects.
+PII Shield is a feasibility experiment developed as part of Kai
+Spriestersbach's research activities at RPTU within the
+[Data Science and Its Applications research group](https://dsa.dfki.de/).
+This plugin does **NOT** work reliably and is **NOT** recommended for real or
+production use. Everything happens at your own risk.
+
+**PII Shield** is a Chrome extension experiment that explores whether
+personally identifiable information (PII) can be transformed before text
+reaches supported AI chatbot pages. It intercepts text, attempts to detect
+sensitive values locally in the browser, and either replaces them with
+plausible synthetic data or masks them with typed placeholders.
+
+The extension is intended for research and experimentation with AI-assisted
+workflows where prompts may contain names, emails, phone numbers, addresses,
+contracts, customer context, or other sensitive operational details. It is
+local-first, has no backend service, and keeps runtime permissions scoped to the
+sites it attempts to protect.
 
 ## Key Features
 
@@ -273,6 +282,8 @@ Before preparing an unpacked release or store package:
 
 ## Limitations
 
+- PII Shield is a research prototype and has not been validated for reliable
+  privacy, security, legal, or production use.
 - Gemini Nano availability depends on Chrome version, flags, hardware, policy,
   and profile state.
 - Simple Mode requires WebGPU and enough browser-cache storage for the local
@@ -287,10 +298,10 @@ Before preparing an unpacked release or store package:
 
 ## Maintainer
 
-PII Shield is created and maintained by
-[Kai Spriestersbach](https://www.afaik.de)
-([kai@afaik.de](mailto:kai@afaik.de)), with a focus on privacy-preserving AI
-workflows, local-first browser tooling, and secure automation.
+PII Shield is an experimental feasibility prototype created by Kai
+Spriestersbach as part of research activities at RPTU within the
+[Data Science and Its Applications research group](https://dsa.dfki.de/).
+Contact: [k.spriestersbach@rptu.de](mailto:k.spriestersbach@rptu.de).
 
 ## License
 
