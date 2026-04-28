@@ -106,6 +106,7 @@ const SIMPLE_MODEL_REMOTE_FILES = [
   'onnx/model_q4.onnx',
   'onnx/model_q4.onnx_data',
 ];
+const BENCH_EXTENSION_NAME = 'PII Shield Gemini Long Paste Bench';
 
 const PII_RESPONSE_SCHEMA = {
   type: 'object',
@@ -237,6 +238,14 @@ function getStatusPayload() {
     mode: piiShieldMode,
     simpleModeModelState: getSimpleModeModelStateSnapshot(),
   };
+}
+
+function isBenchRuntime() {
+  try {
+    return chrome.runtime.getManifest?.().name === BENCH_EXTENSION_NAME;
+  } catch {
+    return false;
+  }
 }
 
 function hasLanguageModelAPI() {
@@ -634,10 +643,91 @@ function contextWindowForSession(session) {
   return finiteNumber(session?.contextWindow) || finiteNumber(session?.inputQuota);
 }
 
-async function measureDetectionPromptUsage(session, text) {
+function createBenchTelemetry() {
+  return {
+    durationMs: null,
+    analysisStatus: 'complete',
+    fallbackReason: null,
+    chunkCount: 0,
+    charLimit: null,
+    measureContextUsageCount: 0,
+    quotaRetryCount: 0,
+    timeoutCount: 0,
+    contextWindow: null,
+    contextUsage: null,
+    inputQuota: null,
+    promptOverheadTokens: aiDetectionPromptOverheadTokens,
+  };
+}
+
+function captureBenchSessionTelemetry(telemetry, session) {
+  if (!telemetry) return;
+
+  telemetry.contextWindow = finiteNumber(session?.contextWindow);
+  telemetry.contextUsage = finiteNumber(session?.contextUsage);
+  telemetry.inputQuota = finiteNumber(session?.inputQuota);
+}
+
+function getBenchTelemetrySnapshot(telemetry) {
+  return {
+    durationMs: finiteNumber(telemetry?.durationMs),
+    analysisStatus: telemetry?.analysisStatus || 'complete',
+    fallbackReason: telemetry?.fallbackReason || null,
+    chunkCount: Number.isInteger(telemetry?.chunkCount) ? telemetry.chunkCount : 0,
+    charLimit: finiteNumber(telemetry?.charLimit),
+    measureContextUsageCount: Number.isInteger(telemetry?.measureContextUsageCount)
+      ? telemetry.measureContextUsageCount
+      : 0,
+    quotaRetryCount: Number.isInteger(telemetry?.quotaRetryCount) ? telemetry.quotaRetryCount : 0,
+    timeoutCount: Number.isInteger(telemetry?.timeoutCount) ? telemetry.timeoutCount : 0,
+    contextWindow: finiteNumber(telemetry?.contextWindow),
+    contextUsage: finiteNumber(telemetry?.contextUsage),
+    inputQuota: finiteNumber(telemetry?.inputQuota),
+    promptOverheadTokens: finiteNumber(telemetry?.promptOverheadTokens),
+  };
+}
+
+function getBenchLongTextConfig() {
+  return {
+    longTextThresholdChars: LONG_TEXT_THRESHOLD_CHARS,
+    aiChunkTimeoutMs: AI_CHUNK_TIMEOUT_MS,
+    longPasteAnalysisBudgetMs: LONG_PASTE_ANALYSIS_BUDGET_MS,
+    chunkContextTargetRatio: CHUNK_CONTEXT_TARGET_RATIO,
+    noCloneContextTargetRatio: NO_CLONE_CONTEXT_TARGET_RATIO,
+    contextUsageLimitRatio: CONTEXT_USAGE_LIMIT_RATIO,
+    maxQuotaRetries: MAX_QUOTA_RETRIES,
+  };
+}
+
+async function getBenchRuntimeInfo() {
+  const aiStatusSnapshot = await refreshAIStatus();
+  const manifest = chrome.runtime.getManifest?.() || {};
+
+  return {
+    manifestVersion: manifest.version || null,
+    aiStatus: aiStatusSnapshot,
+    promptApiFeatures: {
+      hasLanguageModelAPI: hasLanguageModelAPI(),
+      hasLanguageModelParamsAPI: hasLanguageModelParamsAPI(),
+      hasSession: Boolean(aiSession),
+      hasClone: typeof aiSession?.clone === 'function',
+      hasMeasureContextUsage: typeof aiSession?.measureContextUsage === 'function',
+    },
+    session: {
+      contextWindow: finiteNumber(aiSession?.contextWindow),
+      contextUsage: finiteNumber(aiSession?.contextUsage),
+      inputQuota: finiteNumber(aiSession?.inputQuota),
+      promptOverheadTokens: finiteNumber(aiDetectionPromptOverheadTokens),
+    },
+    longPaste: getBenchLongTextConfig(),
+  };
+}
+
+async function measureDetectionPromptUsage(session, text, telemetry = null) {
   if (typeof session?.measureContextUsage !== 'function') return null;
 
   try {
+    if (telemetry) telemetry.measureContextUsageCount += 1;
     const usage = await session.measureContextUsage(
       buildDetectionPrompt(text),
       { responseConstraint: PII_RESPONSE_SCHEMA }
@@ -648,14 +738,14 @@ async function measureDetectionPromptUsage(session, text) {
   }
 }
 
-async function getDetectionPromptOverheadTokens(session) {
+async function getDetectionPromptOverheadTokens(session, telemetry = null) {
   if (aiDetectionPromptOverheadTokens !== null) return aiDetectionPromptOverheadTokens;
-  aiDetectionPromptOverheadTokens = await measureDetectionPromptUsage(session, '');
+  aiDetectionPromptOverheadTokens = await measureDetectionPromptUsage(session, '', telemetry);
   return aiDetectionPromptOverheadTokens;
 }
 
-async function createLongPasteChunks(session, text) {
-  const overheadTokens = await getDetectionPromptOverheadTokens(session);
+async function createLongPasteChunks(session, text, telemetry = null) {
+  const overheadTokens = await getDetectionPromptOverheadTokens(session, telemetry);
   const canClone = typeof session?.clone === 'function';
   const charLimit = estimateChunkCharLimit({
     contextWindow: session?.contextWindow,
@@ -664,20 +754,28 @@ async function createLongPasteChunks(session, text) {
     overheadTokens,
     contextTargetRatio: canClone ? CHUNK_CONTEXT_TARGET_RATIO : NO_CLONE_CONTEXT_TARGET_RATIO,
   });
+  const chunks = splitTextIntoChunks(text, charLimit);
+
+  if (telemetry) {
+    telemetry.charLimit = charLimit;
+    telemetry.chunkCount = chunks.length;
+    telemetry.promptOverheadTokens = overheadTokens;
+    captureBenchSessionTelemetry(telemetry, session);
+  }
 
   return {
     charLimit,
-    chunks: splitTextIntoChunks(text, charLimit),
+    chunks,
   };
 }
 
-async function maybeSplitMeasuredChunk(session, chunk, charLimit) {
+async function maybeSplitMeasuredChunk(session, chunk, charLimit, telemetry = null) {
   if (!shouldMeasureChunk(chunk, charLimit)) return [chunk];
 
   const contextWindow = contextWindowForSession(session);
   if (!contextWindow) return [chunk];
 
-  const usage = await measureDetectionPromptUsage(session, chunk.text);
+  const usage = await measureDetectionPromptUsage(session, chunk.text, telemetry);
   if (!usage || usage <= contextWindow * CONTEXT_USAGE_LIMIT_RATIO) return [chunk];
 
   return splitChunkForRetry(chunk) || [chunk];
@@ -698,8 +796,8 @@ async function getSimpleModeOffer() {
   return buildSimpleModeOffer();
 }
 
-async function detectLongTextAIEntities(session, text) {
-  const { chunks, charLimit } = await createLongPasteChunks(session, text);
+async function detectLongTextAIEntities(session, text, telemetry = null) {
+  const { chunks, charLimit } = await createLongPasteChunks(session, text, telemetry);
   const queue = [...chunks];
   const entities = [];
   const deadline = Date.now() + LONG_PASTE_ANALYSIS_BUDGET_MS;
@@ -715,8 +813,9 @@ async function detectLongTextAIEntities(session, text) {
     }
 
     const chunk = queue.shift();
-    const measuredChunks = await maybeSplitMeasuredChunk(session, chunk, charLimit);
+    const measuredChunks = await maybeSplitMeasuredChunk(session, chunk, charLimit, telemetry);
     if (measuredChunks.length > 1) {
+      if (telemetry) telemetry.chunkCount += measuredChunks.length - 1;
       queue.unshift(...measuredChunks);
       continue;
     }
@@ -732,6 +831,10 @@ async function detectLongTextAIEntities(session, text) {
         const pieces = splitChunkForRetry(chunk);
         if (pieces) {
           quotaRetries += 1;
+          if (telemetry) {
+            telemetry.quotaRetryCount = quotaRetries;
+            telemetry.chunkCount += pieces.length - 1;
+          }
           queue.unshift(...pieces);
           continue;
         }
@@ -743,6 +846,7 @@ async function detectLongTextAIEntities(session, text) {
       }
 
       if (error?.code === 'timeout') {
+        if (telemetry) telemetry.timeoutCount += 1;
         return {
           entities,
           analysisStatus: 'partial',
@@ -1012,11 +1116,16 @@ async function buildReversibleTransformResult(text, entities, tabId, overrides =
   });
 }
 
-async function detectAndAnonymize(text, tabId) {
+async function detectAndAnonymize(text, tabId, telemetry = null) {
   const deterministicEntities = detectDeterministicPII(text);
   const session = await getAISession();
+  captureBenchSessionTelemetry(telemetry, session);
 
   if (!session) {
+    if (telemetry) {
+      telemetry.analysisStatus = 'error';
+      telemetry.fallbackReason = errorCodeFromAIStatus();
+    }
     return baseTransformResult(text, {
       mode: 'reversible',
       error: errorCodeFromAIStatus(),
@@ -1025,13 +1134,23 @@ async function detectAndAnonymize(text, tabId) {
 
   try {
     const longText = text.length >= LONG_TEXT_THRESHOLD_CHARS;
+    if (!longText && telemetry) {
+      telemetry.chunkCount = 1;
+      telemetry.charLimit = null;
+      telemetry.promptOverheadTokens = aiDetectionPromptOverheadTokens;
+    }
     const aiResult = longText
-      ? await detectLongTextAIEntities(session, text)
+      ? await detectLongTextAIEntities(session, text, telemetry)
       : {
         entities: await detectAIEntitiesInIsolatedSession(session, text),
         analysisStatus: 'complete',
         fallbackReason: null,
       };
+    if (telemetry) {
+      telemetry.analysisStatus = aiResult.analysisStatus || 'complete';
+      telemetry.fallbackReason = aiResult.fallbackReason || null;
+      captureBenchSessionTelemetry(telemetry, session);
+    }
     const aiEntities = aiResult.entities;
     const entities = mergeReversibleEntities(text, deterministicEntities, aiEntities);
 
@@ -1046,6 +1165,12 @@ async function detectAndAnonymize(text, tabId) {
 
     return buildReversibleTransformResult(text, entities, tabId);
   } catch (error) {
+    if (telemetry) {
+      telemetry.analysisStatus = 'error';
+      telemetry.fallbackReason = error?.code || 'detection_failed';
+      if (error?.code === 'timeout') telemetry.timeoutCount += 1;
+      captureBenchSessionTelemetry(telemetry, session);
+    }
     if (error?.code !== 'parse_failed' && error?.code !== 'timeout') {
       aiSession = null;
     }
@@ -1531,6 +1656,7 @@ async function loadSettings() {
 
 async function maybeWarmSelectedMode() {
   if (!isEnabled) return;
+  if (isBenchRuntime()) return;
   if (piiShieldMode === 'reversible') {
     void ensureAISessionStarted();
     return;
@@ -1581,6 +1707,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = String(sender.tab?.id || message.tabId || 'unknown');
 
   switch (message.type) {
+    case 'BENCH_GET_RUNTIME_INFO': {
+      initializationPromise
+        .then(() => getBenchRuntimeInfo())
+        .then((info) => sendResponse(info))
+        .catch((error) => {
+          console.error('[PII Shield] Bench runtime info failed:', error);
+          sendResponse({
+            error: error?.code || 'bench_runtime_info_failed',
+            errorMessage: error?.message || String(error),
+          });
+        });
+      return true;
+    }
+
+    case 'BENCH_ANALYZE_TEXT': {
+      const text = String(message.text || '');
+      const telemetry = createBenchTelemetry();
+      const startedAt = Date.now();
+
+      initializationPromise
+        .then(() => detectAndAnonymize(text, tabId, telemetry))
+        .then((result) => {
+          telemetry.durationMs = Date.now() - startedAt;
+          sendResponse({
+            ...result,
+            ...getBenchTelemetrySnapshot(telemetry),
+          });
+        })
+        .catch((error) => {
+          console.error('[PII Shield] Bench analyze error:', error);
+          telemetry.durationMs = Date.now() - startedAt;
+          telemetry.analysisStatus = 'error';
+          telemetry.fallbackReason = error?.code || 'detection_failed';
+          sendResponse({
+            ...baseTransformResult(text, {
+              mode: 'reversible',
+              error: error?.code || 'detection_failed',
+            }),
+            ...getBenchTelemetrySnapshot(telemetry),
+          });
+        });
+      return true;
+    }
+
     case 'ANONYMIZE_TEXT': {
       initializationPromise
         .then(() => {
@@ -1797,6 +1967,7 @@ async function openFirstInstallOnboarding() {
 }
 
 chrome.runtime.onInstalled.addListener((details) => {
+  if (isBenchRuntime()) return;
   if (details?.reason !== 'install') return;
 
   openFirstInstallOnboarding().catch((error) => {
