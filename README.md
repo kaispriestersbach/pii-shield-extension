@@ -1,13 +1,19 @@
-# IMPORTANT: Development Has Moved
+# IMPORTANT: This Repository Is Inactive
 
 > [!IMPORTANT]
-> Future development of this extension takes place exclusively in
-> [dfki-dsa/pii-guardrail-browser-extension](https://github.com/dfki-dsa/pii-guardrail-browser-extension).
-> Please get the plugin from that repository from now on. This repository is no
-> longer the active development location.
+> This repository contains Kai Spriestersbach's earlier individual research
+> prototype and is no longer maintained.
 >
-> Deutsch: Die zukuenftige Entwicklung findet ausschliesslich dort statt. Bitte
-> beziehen Sie das Plugin ab sofort ueber das neue Repository.
+> A new team-developed version is available at
+> [dfki-dsa/pii-guardrail-browser-extension](https://github.com/dfki-dsa/pii-guardrail-browser-extension).
+> If you are interested in the current plugin, please get it from that
+> repository. This repository remains available only as an archived reference.
+>
+> Deutsch: Dieses Repository enthaelt den frueheren individuellen
+> Forschungsprototyp von Kai Spriestersbach und wird nicht mehr gepflegt. Die
+> neue, im Team entwickelte Version ist unter
+> [dfki-dsa/pii-guardrail-browser-extension](https://github.com/dfki-dsa/pii-guardrail-browser-extension)
+> verfuegbar. Bitte beziehen Sie das aktuelle Plugin von dort.
 
 # PII Shield - AI Privacy Guard
 
