@@ -1,3 +1,14 @@
+# IMPORTANT: Development Has Moved
+
+> [!IMPORTANT]
+> Future development of this extension takes place exclusively in
+> [dfki-dsa/pii-guardrail-browser-extension](https://github.com/dfki-dsa/pii-guardrail-browser-extension).
+> Please get the plugin from that repository from now on. This repository is no
+> longer the active development location.
+>
+> Deutsch: Die zukuenftige Entwicklung findet ausschliesslich dort statt. Bitte
+> beziehen Sie das Plugin ab sofort ueber das neue Repository.
+
 # PII Shield - AI Privacy Guard
 
 [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-1f6feb)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
